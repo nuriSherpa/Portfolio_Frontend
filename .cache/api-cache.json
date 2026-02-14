@@ -1,0 +1,130 @@
+{
+  "hero": {
+    "data": {
+      "name": "Tendinuri Sherpa",
+      "title": "Full Stack Developer",
+      "profileImage": "https://media.canva.com/v2/image-resize/format:PNG/height:550/quality:100/uri:ifs%3A%2F%2FM%2Fc2bb97be-cc36-435c-a468-73129d9ec0a9/watermark:F/width:550?csig=AAAAAAAAAAAAAAAAAAAAAOmnIKGiNPVtBBd-sZ61eRuwhKFW4B8OItPFgFlGzExs&exp=1770629015&osig=AAAAAAAAAAAAAAAAAAAAAP2FOZAB6GxCQGPPgpt_4sMkszdw3XQPbxOei3c7zhQA&signer=media-rpc&x-canva-quality=thumbnail_large",
+      "shortBio": "Building amazing web applications",
+      "socialLinks": [
+        {
+          "platform": "github",
+          "url": "https://github.com/tendinuri",
+          "order": 99,
+          "_id": "6989086018dfd513c92d26fa"
+        },
+        {
+          "platform": "linkedin",
+          "url": "https://github.com/tendinuri",
+          "order": 99,
+          "_id": "6989086018dfd513c92d26fb"
+        },
+        {
+          "platform": "twitter",
+          "url": "https://github.com/tendinuri",
+          "order": 99,
+          "_id": "6989086018dfd513c92d26fc"
+        },
+        {
+          "platform": "email",
+          "url": "tendinurisherpa@gmail.com",
+          "order": 99,
+          "_id": "6989086018dfd513c92d26fd"
+        }
+      ],
+      "isActive": true,
+      "lastUpdated": "2026-02-08T22:04:16.604Z"
+    },
+    "timestamp": 1770822724662,
+    "ttl": 120000
+  },
+  "projects": {
+    "data": [
+      {
+        "_id": "698c9d959893fd82202df8cc",
+        "title": "AI Inventory Management System for business",
+        "slug": "ai-inventory-management-system-for-business",
+        "excerpt": "A smart inventory management system for small and medium retail stores that analyzes sales data and provides actionable restocking and pricing suggestions.",
+        "imageUrl": "https://example.com/images/ai-inventory.png",
+        "technologies": [
+          {
+            "name": "Express.js",
+            "category": "Express.js",
+            "icon": "https://example.com/icons/expressjs.png"
+          },
+          {
+            "name": "MongoDB",
+            "category": "MongoDB",
+            "icon": "https://example.com/icons/mongodb.png"
+          }
+        ],
+        "projectStatus": "planning",
+        "projectCompletionDate": "2026-06-30T00:00:00.000Z",
+        "structuredData": {
+          "@context": "https://schema.org",
+          "@type": "CreativeWork",
+          "name": "AI Inventory Management System for business",
+          "description": "A smart inventory management system for small and medium retail stores that analyzes sales data and provides actionable restocking and pricing suggestions.",
+          "image": "https://example.com/images/ai-inventory.png",
+          "url": "https://yourdomain.com/projects/ai-inventory-management-system-for-business",
+          "author": {
+            "@type": "Person",
+            "name": "Your Name",
+            "url": "https://yourdomain.com",
+            "jobTitle": "Full Stack Developer"
+          },
+          "programmingLanguage": [
+            "Express.js",
+            "MongoDB"
+          ],
+          "creativeWorkStatus": "Draft"
+        },
+        "canonicalUrl": "https://yourdomain.com/projects/ai-inventory-management-system-for-business",
+        "id": "698c9d959893fd82202df8cc"
+      },
+      {
+        "_id": "698572cb90f8aa0173a7de13",
+        "title": "AI Inventory Management System",
+        "slug": "ai-inventory-management-system",
+        "excerpt": "A smart inventory management system for small and medium retail stores that analyzes sales data and provides actionable restocking and pricing suggestions.",
+        "imageUrl": "https:&#x2F;&#x2F;example.com&#x2F;images&#x2F;ai-inventory.png",
+        "technologies": [
+          {
+            "name": "Express.js",
+            "category": "Express.js",
+            "icon": "https://example.com/icons/expressjs.png"
+          },
+          {
+            "name": "MongoDB",
+            "category": "MongoDB",
+            "icon": "https://example.com/icons/mongodb.png"
+          }
+        ],
+        "projectStatus": "planning",
+        "projectCompletionDate": "2026-06-30T00:00:00.000Z",
+        "structuredData": {
+          "@context": "https://schema.org",
+          "@type": "CreativeWork",
+          "name": "AI Inventory Management System",
+          "description": "A smart inventory management system for small and medium retail stores that analyzes sales data and provides actionable restocking and pricing suggestions.",
+          "image": "https:&#x2F;&#x2F;example.com&#x2F;images&#x2F;ai-inventory.png",
+          "url": "https://yourdomain.com/projects/ai-inventory-management-system",
+          "author": {
+            "@type": "Person",
+            "name": "Your Name",
+            "url": "https://yourdomain.com",
+            "jobTitle": "Full Stack Developer"
+          },
+          "programmingLanguage": [
+            "Express.js",
+            "MongoDB"
+          ],
+          "creativeWorkStatus": "Draft"
+        },
+        "canonicalUrl": "https://yourdomain.com/projects/ai-inventory-management-system",
+        "id": "698572cb90f8aa0173a7de13"
+      }
+    ],
+    "timestamp": 1770823065324,
+    "ttl": 300000
+  }
+}

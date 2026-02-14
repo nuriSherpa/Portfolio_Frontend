@@ -23,7 +23,7 @@ export function Footer() {
           <div className="space-y-4">
             <Link
               href="/"
-              className="text-lg font-bold text-black hover:text-red transition-colors"
+              className="text-lg font-bold text-black hover-bold-red transition-colors"
             >
               Portfolio
             </Link>
@@ -42,7 +42,7 @@ export function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-grey-600 hover:text-red transition-colors"
+                    className="text-sm text-grey-600 hover-bold-red transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -61,7 +61,7 @@ export function Footer() {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-grey-600 hover:text-red transition-colors"
+                    className="text-sm text-grey-600 hover-bold-red transition-colors"
                   >
                     {link.label}
                   </a>

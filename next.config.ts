@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  devIndicators: {
+    buildActivity: false, // Disable the black square
+    buildActivityPosition: 'bottom-right', // Or move it
+  },
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion'],
   },
@@ -10,7 +14,7 @@ const nextConfig = {
       {
         protocol: 'http',
         hostname: 'localhost',
-        port: '5000',
+        port: '9090',
       },
       {
         protocol: 'https',
@@ -18,7 +22,16 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: '**.vercel.app',
+        hostname: 'media.canva.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.canva.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'example.com',
       },
     ],
   },
@@ -42,11 +55,10 @@ const nextConfig = {
   },
 
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     return [
       {
         source: '/api/backend/:path*',
-        destination: `${apiUrl}/:path*`,
+        destination: 'http://localhost:9090/api/v1/:path*',
       },
     ];
   },

@@ -66,4 +66,7 @@
   .contain-paint {
     contain: paint;
   }
+  .hover-bold-red {
+    @apply hover:text-red hover:font-semibold;
+  }
 }

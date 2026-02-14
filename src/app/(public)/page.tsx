@@ -1,13 +1,14 @@
-import { HeroSection } from '@/components/sections/hero-section';
-import { ProjectsGrid } from '@/components/sections/projects-grid';
-import { BlogPreview } from '@/components/sections/blog-preview';
+// src/app/(public)/page.tsx
+import { getHero } from '@/lib/api/actions/hero';
+import { HeroSection } from '@/components/hero/hero-section';
+import { PageError } from '@/components/shared/page-error';
 
-export default function HomePage() {
-  return (
-    <>
-      <HeroSection />
-      <ProjectsGrid />
-      <BlogPreview />
-    </>
-  );
+export default async function HomePage() {
+  const { hero, error } = await getHero();
+
+  if (error || !hero) {
+    return <PageError message={error || 'Failed to load'} />;
+  }
+
+  return <HeroSection hero={hero} />;
 }
