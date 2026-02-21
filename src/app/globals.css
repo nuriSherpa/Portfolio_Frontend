@@ -59,7 +59,34 @@
   }
 }
 
+/* Add to globals.css */
 @layer utilities {
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* GPU acceleration for cards */
+  .will-change-transform {
+    will-change: transform;
+    contain: layout style paint;
+  }
+
+  /* Reduce motion for accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Optimize paint */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
   .content-visibility-auto {
     content-visibility: auto;
   }

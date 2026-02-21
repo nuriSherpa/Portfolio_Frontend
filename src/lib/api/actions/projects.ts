@@ -1,57 +1,72 @@
 // src/lib/api/actions/projects.ts
 'use server';
 
-import { serverFetch } from '../server-fetch';
+import { safeFetch } from '../fetcher';
 import { ENDPOINTS } from '../endpoints';
 import { Project } from '@/lib/types/models';
 
-export async function getProjects() {
-  try {
-    const { data: projects, fromCache } = await serverFetch<Project[]>({
-      url: ENDPOINTS.projects,
-      cacheKey: 'projects',
-      ttl: 5 * 60 * 1000,
-    });
+interface GetProjectsOptions {
+  page?: number;
+  limit?: number;
+}
 
-    console.log('[getProjects] Result:', { projectCount: projects?.length, fromCache });
+export async function getProjects({ page = 1, limit = 6 }: GetProjectsOptions = {}) {
+  try {
+    const url = `${ENDPOINTS.projects}?page=${page}&limit=${limit}`;
+
+    const response = await safeFetch<{
+      success: boolean;
+      data: {
+        projects: Project[];
+        pagination: {
+          currentPage: number;
+          totalPages: number;
+          totalItems: number;
+          hasNextPage: boolean;
+        };
+      };
+    }>({
+      url,
+      method: 'GET',
+      isServer: true,
+      skipCache: false,
+    });
 
     return {
       success: true,
-      projects: projects || [],
+      projects: response?.data?.data?.projects || [],
+      pagination: response?.data?.data?.pagination || null,
       error: null,
-      fromCache,
     };
   } catch (error: any) {
     console.error('[getProjects] Error:', error.message);
     return {
       success: false,
       projects: [],
+      pagination: null,
       error: error.message,
-      fromCache: false,
     };
   }
 }
 
 export async function getProjectBySlug(slug: string) {
   try {
-    const { data: project, fromCache } = await serverFetch<Project>({
+    const response = await safeFetch<{ success: boolean; data: Project }>({
       url: ENDPOINTS.projectBySlug(slug),
-      cacheKey: `project:${slug}`,
-      ttl: 10 * 60 * 1000,
+      method: 'GET',
+      isServer: true,
     });
 
     return {
       success: true,
-      project,
+      project: response?.data?.data || null,
       error: null,
-      fromCache,
     };
   } catch (error: any) {
     return {
       success: false,
       project: null,
       error: error.message,
-      fromCache: false,
     };
   }
 }

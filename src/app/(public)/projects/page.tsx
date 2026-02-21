@@ -1,16 +1,20 @@
 // src/app/(public)/projects/page.tsx
 import { Metadata } from 'next';
+import { Suspense } from 'react';
 import { getProjects } from '@/lib/api/actions/projects';
 import { ProjectsGrid } from '@/components/projects/project-grid';
-import { PageError } from '@/components/shared/page-error';
+import { PageSkeleton } from '@/components/shared/page-skeleton';
 
 export const metadata: Metadata = {
   title: 'Projects | Portfolio',
   description: 'View my latest projects and work',
 };
 
+const PROJECTS_PER_PAGE = 6;
+
 export default async function ProjectsPage() {
-  const { projects, error, success } = await getProjects();
+  // Only fetch first 6, not all
+  const result = await getProjects({ page: 1, limit: PROJECTS_PER_PAGE });
 
   return (
     <main className="min-h-screen bg-white">
@@ -20,9 +24,13 @@ export default async function ProjectsPage() {
           <p className="text-lg text-grey-600">A selection of my recent work</p>
         </div>
 
-        {error && <PageError message={error} />}
-
-        <ProjectsGrid projects={projects} />
+        <Suspense fallback={<PageSkeleton type="projects" />}>
+          <ProjectsGrid
+            initialProjects={result.projects}
+            initialPagination={result.pagination}
+            limit={PROJECTS_PER_PAGE}
+          />
+        </Suspense>
       </div>
     </main>
   );

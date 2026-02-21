@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { safeFetch } from '@/lib/api/fetcher';
-import { useVisitor } from '@/hooks/use-visitor';
 import { ApiError } from '@/lib/utils/api-error';
 
 interface UsePageDataOptions<T> {

@@ -1,73 +1,64 @@
 // src/lib/api/server-fetch.ts
 'use server';
 
-import { createServerClient } from './server';
-import { persistentCache } from '../utils/persistent-cache';
+import { cookies } from 'next/headers';
 
-// In-flight request deduplication (same request happening at same time)
-const inFlight = new Map<string, Promise<any>>();
-
-interface ServerFetchOptions {
+interface FetchOptions {
   url: string;
-  cacheKey: string;
-  ttl?: number;
-  // Optional: specify a path to extract data from response
-  dataPath?: string; // e.g., 'data.hero' or just 'data'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  data?: any;
+  headers?: Record<string, string>;
 }
 
 export async function serverFetch<T>({
   url,
-  cacheKey,
-  ttl = 5 * 60 * 1000,
-  dataPath = 'data', // Default to 'data' for backward compatibility
-}: ServerFetchOptions) {
-  // Check persistent cache first
-  const cached = await persistentCache.get<T>(cacheKey);
-  if (cached) {
-    console.log(`[Server Cache HIT] ${cacheKey}`);
-    return { data: cached, fromCache: true };
-  }
+  method = 'GET',
+  data,
+  headers = {},
+}: FetchOptions): Promise<{ data: T; error: null } | { data: null; error: string }> {
+  try {
+    // Get token from cookies
+    const cookieStore = await cookies();
+    const token = cookieStore.get('visitor_token')?.value;
 
-  // Deduplicate in-flight requests (same request happening at same time)
-  if (inFlight.has(cacheKey)) {
-    console.log(`[Server DEDUPE] Reusing in-flight request: ${cacheKey}`);
-    return inFlight.get(cacheKey)!;
-  }
+    // DEBUG: Log environment variables
+    console.log('[serverFetch] Env check:', {
+      API_URL: process.env.API_URL,
+      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    });
 
-  const promise = (async () => {
-    try {
-      console.log(`[Server FETCH] ${cacheKey}`);
-      const client = await createServerClient();
-      const response = await client.get(url);
+    // Build full URL - ensure no double slashes
+    const baseUrl = process.env.API_URL || 'http://localhost:9090/api/v1';
+    // Remove trailing slash from base and leading slash from url to prevent doubles
+    const cleanBase = baseUrl.replace(/\/$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = `${cleanBase}${cleanPath}`;
 
-      // Extract data based on the provided path
-      let actualData: T;
+    console.log(`[serverFetch] ${method} ${fullUrl}`);
 
-      if (dataPath === 'data') {
-        // Default behavior: response.data.data
-        actualData = response.data.data;
-      } else {
-        // Navigate nested path (e.g., 'data.hero')
-        actualData = dataPath.split('.').reduce((obj, key) => obj?.[key], response.data);
-      }
+    const response = await fetch(fullUrl, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-Visitor-Token': token } : {}),
+        ...headers,
+      },
+      body: data ? JSON.stringify(data) : undefined,
+      cache: 'no-store',
+    });
 
-      console.log(
-        `[Server Fetch] ${cacheKey}:`,
-        typeof actualData,
-        Array.isArray(actualData) ? actualData.length : 'object',
-        dataPath !== 'data' ? `(extracted from ${dataPath})` : '',
-      );
+    console.log(`[serverFetch] Response status: ${response.status}`);
 
-      // Store actual data in cache
-      await persistentCache.set(cacheKey, actualData, ttl);
-
-      return { data: actualData as T, fromCache: false };
-    } finally {
-      // Clean up in-flight after completion
-      inFlight.delete(cacheKey);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[serverFetch] Error response: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-  })();
 
-  inFlight.set(cacheKey, promise);
-  return promise;
+    const result = await response.json();
+    return { data: result, error: null };
+  } catch (error: any) {
+    console.error('[serverFetch] Error:', error.message);
+    return { data: null, error: error.message };
+  }
 }

@@ -1,38 +1,53 @@
+// src/lib/types/models.ts
+export interface Story {
+  id: string;
+  image: string;
+  caption?: string;
+  uploadedAt: string;
+}
+
 export interface HeroSection {
   _id: string;
   name: string;
   title: string;
-  profileImage?: string;
-  shortBio?: string;
-  socialLinks: {
-    platform: string;
-    url: string;
-    order: number;
-    _id: string;
-  }[];
+  profileImage: string;
+  shortBio: string;
+  hireMe?: boolean;
+  socialLinks: SocialLink[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
-
 export interface Project {
   id: string;
   title: string;
+  metaTitle?: string;
+  metaDescription?: string;
   slug: string;
-  description: string;
-  content: string;
-  thumbnail: string;
-  images: string[];
-  technologies: string[];
-  liveUrl?: string;
-  githubUrl?: string;
-  featured: boolean;
-  publishedAt: string;
-  seoTitle?: string;
-  seoDescription?: string;
   keywords?: string[];
+  description: string;
+  excerpt?: string;
+  richContent?: string;
+  projectImage: string;
+  ogImage?: string;
+  projectUrl: string;
+  githubUrl?: string;
+  demoUrl?: string;
+  technologies: {
+    name: string;
+    category?: string;
+    icon?: string;
+  }[];
+  isActive: boolean;
+  isIndexed: boolean;
+  projectStatus: 'planning' | 'in-progress' | 'completed' | 'on-hold' | 'archived';
+  projectCompletionDate?: Date;
+  publishedAt: Date;
+  views: number;
+  likes: number;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
-
 export interface AboutMe {
   id: string;
   name: string;

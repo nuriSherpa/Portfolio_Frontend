@@ -1,10 +1,12 @@
+// src/lib/utils/request-manager.ts
+
 // Track in-flight requests to prevent duplicates
 const pendingRequests = new Map<string, AbortController>();
 const requestHistory = new Map<string, number>(); // url -> timestamp
 
 // Debounce config
-const DEBOUNCE_MS = 300; // Wait 300ms before sending
-const REFRESH_COOLDOWN_MS = 2000; // 2 seconds between refreshes
+const DEBOUNCE_MS = 300;
+const REFRESH_COOLDOWN_MS = 2000;
 
 interface RequestConfig {
   url: string;
@@ -16,8 +18,13 @@ export function createRequestKey(config: RequestConfig): string {
   return `${config.method || 'GET'}:${config.url}`;
 }
 
-// Check if we should block this request (refresh spam)
-export function shouldBlockRequest(url: string): boolean {
+// FIXED: Add isServer parameter to skip blocking on server
+export function shouldBlockRequest(url: string, isServer = false): boolean {
+  // NEVER block on server-side requests
+  if (isServer) {
+    return false;
+  }
+
   const now = Date.now();
   const lastRequest = requestHistory.get(url);
 
@@ -30,13 +37,11 @@ export function shouldBlockRequest(url: string): boolean {
   return false;
 }
 
-// Debounce requests
 export function debounceRequest<T>(
   key: string,
   fn: () => Promise<T>,
   waitMs: number = DEBOUNCE_MS,
 ): Promise<T> {
-  // Cancel previous pending request
   const existing = pendingRequests.get(key);
   if (existing) {
     existing.abort();
@@ -75,7 +80,6 @@ setInterval(() => {
   const now = Date.now();
   for (const [url, time] of requestHistory) {
     if (now - time > 60000) {
-      // Keep 1 minute history
       requestHistory.delete(url);
     }
   }

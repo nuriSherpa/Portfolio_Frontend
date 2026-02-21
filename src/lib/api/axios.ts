@@ -9,26 +9,4 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for visitor token
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const visitorToken = localStorage.getItem('visitor_token');
-    if (visitorToken) {
-      config.headers['X-Visitor-Token'] = visitorToken;
-    }
-  }
-  return config;
-});
-
-// Response interceptor
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 404) {
-      console.error('Resource not found');
-    }
-    return Promise.reject(error);
-  },
-);
-
 export default api;

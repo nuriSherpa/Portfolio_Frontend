@@ -2,137 +2,137 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getProjectBySlug, getProjects } from '@/lib/api/actions/projects';
-import { LazyImage } from '@/components/shared/lazy-image';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, Github, ExternalLink } from 'lucide-react';
-import { Suspense } from 'react';
+import { ArrowLeft, Calendar, Github, ExternalLink, ImageOff } from 'lucide-react';
 
-// Generate metadata
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>; // ← params is now a Promise
-}): Promise<Metadata> {
-  const { slug } = await params; // ← await params
+interface Props {
+  params: Promise<{ slug: string }>;
+}
+
+export async function generateStaticParams() {
+  const { projects } = await getProjects();
+  if (!projects?.length) return [];
+  return projects.map((p) => ({ slug: p.slug }));
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  if (!slug) return { title: 'Project Not Found' };
+
   const { project } = await getProjectBySlug(slug);
-
-  if (!project) {
-    return { title: 'Project Not Found' };
-  }
+  if (!project) return { title: 'Project Not Found' };
 
   return {
     title: `${project.title} | Projects`,
-    description: project.excerpt,
+    description: project.excerpt || project.metaDescription,
   };
 }
 
-// Generate static params
-export async function generateStaticParams() {
-  const { projects } = await getProjects();
+export default async function ProjectPage({ params }: Props) {
+  const { slug } = await params;
+  if (!slug) notFound();
 
-  return projects.map((project) => ({
-    slug: project.slug,
-  }));
-}
+  const { project, success } = await getProjectBySlug(slug);
+  if (!success || !project) notFound();
 
-const fixUrl = (url: string) => url?.replace(/&#x2F;/g, '/') || '';
-
-const statusLabels: Record<string, string> = {
-  planning: 'Planning',
-  'in-progress': 'In Progress',
-  completed: 'Completed',
-  archived: 'Archived',
-};
-
-export default async function ProjectPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>; // ← params is now a Promise
-}) {
-  const { slug } = await params; // ← await params
-  const { project, error } = await getProjectBySlug(slug);
-
-  if (!project || error) {
-    notFound();
-  }
+  const hasImage = project.projectImage?.trim() !== '';
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Back link */}
-      <div className="container mx-auto px-4 py-6">
-        <Link
-          href="/projects"
-          className="inline-flex items-center gap-2 text-grey-600 hover:text-red"
-        >
-          <ArrowLeft size={20} />
-          Back to Projects
-        </Link>
-      </div>
+      {/* Project Header */}
+      <div className="border-b border-grey-200">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          {/* Back Link */}
+          <Link
+            href="/projects"
+            className="inline-flex items-center gap-2 text-grey-600 hover:text-red mb-8 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Projects
+          </Link>
 
-      {/* Hero Image with Suspense */}
-      <Suspense fallback={<div className="h-64 lg:h-96 bg-grey-200 animate-pulse" />}>
-        <div className="relative h-64 lg:h-96 w-full bg-grey-100">
-          <LazyImage
-            src={fixUrl(project.imageUrl)}
-            alt={project.title}
-            fill
-            className="object-cover"
-            priority
-          />
-        </div>
-      </Suspense>
+          {/* Title - RED */}
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-red mb-4">
+            {project.title}
+          </h1>
 
-      {/* Content */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="max-w-3xl mx-auto">
-          {/* Status */}
-          <span className="inline-block px-3 py-1 bg-grey-100 text-grey-700 rounded-full text-sm mb-4">
-            {statusLabels[project.projectStatus]}
-          </span>
-
-          <h1 className="text-3xl lg:text-4xl font-bold text-black mb-4">{project.title}</h1>
-
-          <p className="text-lg text-grey-600 mb-8">{project.description}</p>
-
-          {/* Technologies */}
-          {project.technologies?.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-lg font-bold text-black mb-3">Technologies</h2>
-              <div className="flex flex-wrap gap-2">
-                {project.technologies.map((tech) => (
-                  <span
-                    key={tech.name}
-                    className="px-3 py-1 bg-grey-50 text-grey-700 rounded-lg text-sm"
-                  >
-                    {tech.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Links */}
-          <div className="flex gap-4">
-            {project.projectUrl && (
-              <a
-                href={fixUrl(project.projectUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-red text-white rounded-lg hover:bg-red-600 transition-colors"
-              >
-                <Github size={20} />
-                View Code
-                <ExternalLink size={16} />
-              </a>
+          {/* Meta - RED */}
+          <div className="flex flex-wrap gap-4 mb-8">
+            {project.projectStatus && (
+              <span className="text-red font-medium uppercase tracking-wide text-sm">
+                {project.projectStatus}
+              </span>
+            )}
+            {project.projectCompletionDate && (
+              <span className="flex items-center gap-2 text-red">
+                <Calendar className="w-4 h-4" />
+                {new Date(project.projectCompletionDate).toLocaleDateString()}
+              </span>
             )}
           </div>
 
-          {/* Date */}
-          {project.projectCompletionDate && (
-            <div className="mt-8 pt-8 border-t border-grey-200 flex items-center gap-2 text-grey-500">
-              <Calendar size={16} />
-              Completed: {new Date(project.projectCompletionDate).toLocaleDateString()}
+          {/* Image */}
+          {hasImage ? (
+            <div className="relative aspect-video bg-grey-100 mb-8">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={project.projectImage}
+                alt={project.title}
+                className="w-full h-full object-cover"
+              />
             </div>
+          ) : (
+            <div className="aspect-video bg-grey-100 flex items-center justify-center mb-8">
+              <ImageOff className="w-12 h-12 text-grey-400" />
+            </div>
+          )}
+
+          {/* Description - Only once */}
+          <p className="text-lg text-grey-600 leading-relaxed max-w-2xl">{project.description}</p>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Technologies */}
+        {project.technologies?.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-sm font-bold text-grey-900 uppercase tracking-wide mb-4">
+              Technologies
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {project.technologies.map((tech) => (
+                <span key={tech.name} className="px-3 py-1 bg-grey-100 text-grey-800 text-sm">
+                  {tech.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Buttons - BLACK & RED */}
+        <div className="flex flex-wrap gap-4">
+          {project.projectUrl && (
+            <a
+              href={project.projectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-black text-white hover:bg-grey-800 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              View Live Project
+            </a>
+          )}
+          {project.githubUrl && (
+            <a
+              href={project.githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 border-2 border-black text-black hover:bg-red hover:text-white hover:border-red transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              View Code
+            </a>
           )}
         </div>
       </div>

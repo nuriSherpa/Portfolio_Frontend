@@ -60,7 +60,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     lastHealthCheck = now;
 
     try {
-      await healthApi.get('/health');
+      await healthApi.get('/api/v1/health');
       globalIsConnected = true;
       setIsConnected(true);
     } catch (error: any) {
