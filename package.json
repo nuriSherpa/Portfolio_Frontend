@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@loadable/component": "^5.16.7",
+    "@tanstack/react-virtual": "^3.13.18",
     "axios": "^1.13.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

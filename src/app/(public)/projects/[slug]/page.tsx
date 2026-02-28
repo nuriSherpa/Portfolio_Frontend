@@ -1,100 +1,78 @@
 // src/app/(public)/projects/[slug]/page.tsx
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getProjectBySlug, getProjects } from '@/lib/api/actions/projects';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, Github, ExternalLink, ImageOff } from 'lucide-react';
+import { ArrowLeft, Calendar, Github, ExternalLink } from 'lucide-react';
+import { getProjects, getProjectBySlug } from '@/lib/api/actions/projects';
 
 interface Props {
-  params: Promise<{ slug: string }>;
+  params: { slug: string };
 }
 
+// SSG: Generate all project pages at build time
 export async function generateStaticParams() {
-  const { projects } = await getProjects();
-  if (!projects?.length) return [];
+  const projects = await getProjects(100);
   return projects.map((p) => ({ slug: p.slug }));
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  if (!slug) return { title: 'Project Not Found' };
+// ISR: Revalidate individual pages
+export const revalidate = 3600;
 
-  const { project } = await getProjectBySlug(slug);
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const project = await getProjectBySlug(params.slug);
   if (!project) return { title: 'Project Not Found' };
 
   return {
     title: `${project.title} | Projects`,
-    description: project.excerpt || project.metaDescription,
+    description: project.excerpt,
   };
 }
 
 export default async function ProjectPage({ params }: Props) {
-  const { slug } = await params;
-  if (!slug) notFound();
+  const project = await getProjectBySlug(params.slug);
 
-  const { project, success } = await getProjectBySlug(slug);
-  if (!success || !project) notFound();
-
-  const hasImage = project.projectImage?.trim() !== '';
+  if (!project) notFound();
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Project Header */}
       <div className="border-b border-grey-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          {/* Back Link */}
+        <div className="max-w-4xl mx-auto px-4 py-12">
           <Link
             href="/projects"
-            className="inline-flex items-center gap-2 text-grey-600 hover:text-red mb-8 transition-colors"
+            className="inline-flex items-center gap-2 text-grey-600 hover:text-red mb-8"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Projects
           </Link>
 
-          {/* Title - RED */}
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-red mb-4">
             {project.title}
           </h1>
 
-          {/* Meta - RED */}
-          <div className="flex flex-wrap gap-4 mb-8">
-            {project.projectStatus && (
-              <span className="text-red font-medium uppercase tracking-wide text-sm">
-                {project.projectStatus}
-              </span>
-            )}
-            {project.projectCompletionDate && (
-              <span className="flex items-center gap-2 text-red">
-                <Calendar className="w-4 h-4" />
-                {new Date(project.projectCompletionDate).toLocaleDateString()}
-              </span>
-            )}
-          </div>
+          {project.projectStatus && (
+            <span className="text-red font-medium uppercase tracking-wide text-sm">
+              {project.projectStatus}
+            </span>
+          )}
 
-          {/* Image */}
-          {hasImage ? (
-            <div className="relative aspect-video bg-grey-100 mb-8">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+          {project.projectImage && (
+            <div className="relative aspect-video bg-grey-100 my-8">
               <img
                 src={project.projectImage}
                 alt={project.title}
                 className="w-full h-full object-cover"
+                width={1200}
+                height={675}
+                priority
               />
-            </div>
-          ) : (
-            <div className="aspect-video bg-grey-100 flex items-center justify-center mb-8">
-              <ImageOff className="w-12 h-12 text-grey-400" />
             </div>
           )}
 
-          {/* Description - Only once */}
-          <p className="text-lg text-grey-600 leading-relaxed max-w-2xl">{project.description}</p>
+          <p className="text-lg text-grey-600 leading-relaxed">{project.description}</p>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Technologies */}
+      <div className="max-w-4xl mx-auto px-4 py-12">
         {project.technologies?.length > 0 && (
           <div className="mb-12">
             <h2 className="text-sm font-bold text-grey-900 uppercase tracking-wide mb-4">
@@ -110,7 +88,6 @@ export default async function ProjectPage({ params }: Props) {
           </div>
         )}
 
-        {/* Buttons - BLACK & RED */}
         <div className="flex flex-wrap gap-4">
           {project.projectUrl && (
             <a

@@ -18,36 +18,29 @@ export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
-  // Get active page - FIXED LOGIC
   const getActivePage = () => {
-    // Check exact match first
     const exactMatch = navItems.find((item) => pathname === item.href);
     if (exactMatch) return exactMatch;
-
-    // Check if path starts with item href (for nested routes)
     const startsWithMatch = navItems.find(
       (item) => item.href !== '/' && pathname.startsWith(item.href + '/'),
     );
-
-    // Default to home
     return startsWithMatch || navItems[0];
   };
 
   const activePage = getActivePage();
 
-  // Check if item is active - FIXED FUNCTION
   const isItemActive = (itemHref: string) => {
     if (itemHref === '/') {
-      return pathname === '/'; // Home only active on exact match
+      return pathname === '/';
     }
     return pathname === itemHref || pathname.startsWith(itemHref + '/');
   };
 
   return (
     <>
-      {/* Desktop Navbar */}
+      {/* Desktop Navbar - 80% width */}
       <header className="sticky top-0 z-50 w-full border-b border-grey-200 bg-white hidden md:block">
-        <nav className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
+        <nav className="w-[80%] mx-auto flex h-16 items-center justify-between">
           <Link href="/" className="text-xl font-bold text-black hover:text-red transition-colors">
             XD
           </Link>
@@ -66,7 +59,6 @@ export function Navbar() {
                     onMouseEnter={() => setHoveredItem(item.href)}
                     onMouseLeave={() => setHoveredItem(null)}
                   >
-                    {/* Icon container - shows on active OR hover */}
                     <div
                       className={cn(
                         'absolute inset-0 flex items-center justify-center transition-all duration-300',
@@ -84,7 +76,6 @@ export function Navbar() {
                       />
                     </div>
 
-                    {/* Text container - shows when NOT active AND NOT hovered */}
                     <div
                       className={cn(
                         'absolute inset-0 flex items-center justify-center transition-all duration-300',
@@ -93,12 +84,7 @@ export function Navbar() {
                           : 'opacity-0 scale-90 translate-y-1',
                       )}
                     >
-                      <span
-                        className={cn(
-                          'text-sm font-medium transition-colors',
-                          'text-grey-600 group-hover:text-red',
-                        )}
-                      >
+                      <span className="text-sm font-medium text-grey-600 group-hover:text-red">
                         {item.label}
                       </span>
                     </div>
@@ -110,18 +96,14 @@ export function Navbar() {
         </nav>
       </header>
 
-      {/* Mobile Floating Navigation */}
+      {/* Mobile Floating Navigation - stays fixed */}
       <div className="fixed bottom-6 right-6 z-50 md:hidden">
-        {/* Floating Action Button */}
         <div className="relative">
-          {/* Menu Items */}
           {isOpen && (
             <div className="absolute bottom-14 right-0 flex flex-col items-end gap-2 mb-2">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = isItemActive(item.href);
-
-                // Show only non-active pages in the menu
                 if (isActive) return null;
 
                 return (
@@ -131,10 +113,7 @@ export function Navbar() {
                     onClick={() => setIsOpen(false)}
                     className="flex items-center gap-3 bg-white px-4 py-3 rounded-full shadow-lg border border-grey-200 hover:bg-grey-100 transition-all duration-200"
                   >
-                    {/* Icon - always shows in mobile menu */}
                     <Icon size={18} className="text-grey-600" />
-
-                    {/* Text */}
                     <span className="text-sm font-medium text-grey-700">{item.label}</span>
                   </Link>
                 );
@@ -142,7 +121,6 @@ export function Navbar() {
             </div>
           )}
 
-          {/* Main FAB */}
           <button
             onClick={() => setIsOpen(!isOpen)}
             className={cn(
@@ -151,7 +129,6 @@ export function Navbar() {
             )}
           >
             <div className="relative w-full h-full">
-              {/* XD Text - shows when open */}
               <span
                 className={cn(
                   'absolute inset-0 flex items-center justify-center text-white font-bold text-lg transition-all duration-300',
@@ -161,7 +138,6 @@ export function Navbar() {
                 XD
               </span>
 
-              {/* Active Icon - shows when closed */}
               <div
                 className={cn(
                   'absolute inset-0 flex items-center justify-center transition-all duration-300',
@@ -176,7 +152,6 @@ export function Navbar() {
             </div>
           </button>
 
-          {/* Active page badge - only shows when menu is closed */}
           {!isOpen && (
             <div className="absolute -top-2 -left-2 bg-white px-3 py-1 rounded-full text-xs font-medium shadow border border-grey-200 min-w-[70px] text-center transition-all duration-300">
               {activePage.label}
@@ -184,9 +159,6 @@ export function Navbar() {
           )}
         </div>
       </div>
-
-      {/* Spacer for mobile bottom nav */}
-      <div className="h-0 md:h-0" />
     </>
   );
 }

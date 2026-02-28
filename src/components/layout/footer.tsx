@@ -1,6 +1,10 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const footerLinks = [
+  { href: '/', label: 'Home' },
   { href: '/projects', label: 'Projects' },
   { href: '/blog', label: 'Blog' },
   { href: '/about', label: 'About' },
@@ -14,6 +18,25 @@ const socialLinks = [
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const pathname = usePathname();
+
+  // Normalize path for comparison (remove trailing slash except for root)
+  const normalizePath = (path: string) => {
+    if (path === '/') return '/';
+    return path.replace(/\/$/, '');
+  };
+
+  const currentPath = normalizePath(pathname);
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    const normalizedHref = normalizePath(href);
+
+    // If same page, prevent navigation and scroll to top
+    if (currentPath === normalizedHref) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <footer className="border-t border-grey-200 bg-white">
@@ -23,9 +46,10 @@ export function Footer() {
           <div className="space-y-4">
             <Link
               href="/"
-              className="text-lg font-bold text-black hover-bold-red transition-colors"
+              onClick={(e) => handleNavClick(e, '/')}
+              className="text-lg font-bold text-black hover:text-red transition-colors"
             >
-              Portfolio
+              XD
             </Link>
             <p className="text-sm text-grey-600 max-w-xs">
               Full-stack developer building fast, scalable web applications.
@@ -42,7 +66,8 @@ export function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-grey-600 hover-bold-red transition-colors"
+                    onClick={(e) => handleNavClick(e, link.href)}
+                    className="text-sm text-grey-600 hover:text-red transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -61,7 +86,7 @@ export function Footer() {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-grey-600 hover-bold-red transition-colors"
+                    className="text-sm text-grey-600 hover:text-red transition-colors"
                   >
                     {link.label}
                   </a>
@@ -73,7 +98,7 @@ export function Footer() {
 
         {/* Bottom */}
         <div className="mt-12 pt-8 border-t border-grey-200 flex flex-col md:flex-row justify-center items-center gap-4">
-          <p className="text-sm text-grey-600">{currentYear} Portfolio. All rights reserved.</p>
+          <p className="text-sm text-grey-600">{currentYear} XD. All rights reserved.</p>
         </div>
       </div>
     </footer>

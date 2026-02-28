@@ -1,72 +1,78 @@
 // src/lib/api/actions/projects.ts
-'use server';
-
-import { safeFetch } from '../fetcher';
-import { ENDPOINTS } from '../endpoints';
+import { serverFetch } from '../server-fetch';
 import { Project } from '@/lib/types/models';
+import { ENDPOINTS } from '../endpoints';
 
-interface GetProjectsOptions {
-  page?: number;
-  limit?: number;
+interface ProjectsApiResponse {
+  success: boolean;
+  data: {
+    projects: Project[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: number;
+      itemsPerPage: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+      nextPage: number | null;
+      prevPage: number | null;
+    };
+  };
+  timestamp?: string;
 }
 
-export async function getProjects({ page = 1, limit = 6 }: GetProjectsOptions = {}) {
-  try {
-    const url = `${ENDPOINTS.projects}?page=${page}&limit=${limit}`;
+export async function getProjects(limit = 6, page = 1) {
+  const result = await serverFetch<ProjectsApiResponse>({
+    url: `${ENDPOINTS.projects}?limit=${limit}&page=${page}`,
+  });
 
-    const response = await safeFetch<{
-      success: boolean;
-      data: {
-        projects: Project[];
-        pagination: {
-          currentPage: number;
-          totalPages: number;
-          totalItems: number;
-          hasNextPage: boolean;
-        };
-      };
-    }>({
-      url,
-      method: 'GET',
-      isServer: true,
-      skipCache: false,
-    });
-
+  if (result.error || !result.data) {
     return {
-      success: true,
-      projects: response?.data?.data?.projects || [],
-      pagination: response?.data?.data?.pagination || null,
-      error: null,
-    };
-  } catch (error: any) {
-    console.error('[getProjects] Error:', error.message);
-    return {
-      success: false,
-      projects: [],
-      pagination: null,
-      error: error.message,
+      projects: [] as Project[],
+      pagination: {
+        hasNextPage: false,
+        currentPage: page,
+        totalPages: 1,
+        totalItems: 0,
+        itemsPerPage: limit,
+        hasPrevPage: false,
+        nextPage: null,
+        prevPage: null,
+      },
     };
   }
+
+  const apiResponse = result.data;
+
+  return {
+    projects: apiResponse.data?.projects ?? [],
+    pagination: apiResponse.data?.pagination ?? {
+      hasNextPage: false,
+      currentPage: page,
+      totalPages: 1,
+      totalItems: 0,
+      itemsPerPage: limit,
+      hasPrevPage: false,
+      nextPage: null,
+      prevPage: null,
+    },
+  };
 }
 
 export async function getProjectBySlug(slug: string) {
-  try {
-    const response = await safeFetch<{ success: boolean; data: Project }>({
-      url: ENDPOINTS.projectBySlug(slug),
-      method: 'GET',
-      isServer: true,
-    });
-
-    return {
-      success: true,
-      project: response?.data?.data || null,
-      error: null,
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      project: null,
-      error: error.message,
-    };
+  interface ProjectApiResponse {
+    success: boolean;
+    data: Project;
+    timestamp?: string;
   }
+
+  const result = await serverFetch<ProjectApiResponse>({
+    url: ENDPOINTS.projectBySlug(slug),
+  });
+
+  if (result.error || !result.data) {
+    return null;
+  }
+
+  return result.data.data ?? null;
 }

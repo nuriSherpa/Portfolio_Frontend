@@ -1,10 +1,11 @@
 // src/components/projects/projects-grid.tsx
 'use client';
 
-import { useState, memo } from 'react';
+import { useState, useCallback, memo, useRef, useEffect, useMemo } from 'react';
 import { Project } from '@/lib/types/models';
 import { ProjectCard } from './project-card';
 import { ProjectCardSkeleton } from './project-card-skeleton';
+import { ProjectFilter } from './project-filter';
 import { getProjects } from '@/lib/api/actions/projects';
 
 interface ProjectsGridProps {
@@ -25,23 +26,69 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   const [page, setPage] = useState(2);
   const [hasMore, setHasMore] = useState(initialPagination?.hasNextPage ?? false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
 
-  const loadMore = async () => {
-    if (isFetching || !hasMore) return;
+  const isFetchingRef = useRef(false);
+  const loaderRef = useRef<HTMLDivElement>(null);
+  const hasScrolled = useRef(false);
 
-    setIsFetching(true);
+  // Local filtering
+  const filteredProjects = useMemo(() => {
+    if (activeFilter === 'all') return projects;
+    return projects.filter((p) => p.projectStatus === activeFilter);
+  }, [projects, activeFilter]);
+
+  // Only load more when user has scrolled and loader is visible
+  useEffect(() => {
+    if (!loaderRef.current || !hasMore || isLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        // Only trigger if user has scrolled (not on initial load) and not already fetching
+        if (entry.isIntersecting && !isFetchingRef.current && hasScrolled.current) {
+          loadMore();
+        }
+      },
+      {
+        threshold: 0,
+        rootMargin: '100px',
+      },
+    );
+
+    observer.observe(loaderRef.current);
+
+    return () => observer.disconnect();
+  }, [hasMore, isLoading]);
+
+  // Track scroll to prevent initial load trigger
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 100) {
+        hasScrolled.current = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (isFetchingRef.current || !hasMore) return;
+
+    isFetchingRef.current = true;
     setIsLoading(true);
 
     try {
-      const result = await getProjects({ page, limit });
+      const result = await getProjects(limit, page);
 
-      if (result.success && result.projects.length > 0) {
+      if (result.projects.length > 0) {
         setProjects((prev) => {
           const existingIds = new Set(prev.map((p) => p._id));
           const newProjects = result.projects.filter((p) => !existingIds.has(p._id));
           return [...prev, ...newProjects];
         });
+
         setPage((p) => p + 1);
         setHasMore(result.pagination?.hasNextPage ?? false);
       } else {
@@ -50,10 +97,14 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
     } catch (error) {
       console.error('Load failed:', error);
     } finally {
-      setIsFetching(false);
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [page, limit, hasMore]);
+
+  const handleFilterChange = useCallback((filter: string) => {
+    setActiveFilter(filter);
+  }, []);
 
   if (!projects.length) {
     return (
@@ -66,37 +117,47 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 w-full">
+      <ProjectFilter activeFilter={activeFilter} onFilterChange={handleFilterChange} />
+
+      {/* Projects Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((project) => (
+        {filteredProjects.map((project) => (
           <MemoizedProjectCard key={project._id} project={project} />
         ))}
-
-        {/* Show skeletons when loading more */}
-        {isLoading && (
-          <>
-            {[...Array(limit)].map((_, i) => (
-              <ProjectCardSkeleton key={`skeleton-${i}`} />
-            ))}
-          </>
-        )}
       </div>
 
-      {/* Load more button */}
-      {hasMore && !isLoading && (
-        <div className="text-center py-4">
-          <button
-            onClick={loadMore}
-            className="px-6 py-2 bg-red text-white rounded-full text-sm hover:bg-red/90 transition-colors"
-          >
-            Load More Projects
-          </button>
+      {/* Loading Area - Only show loader if more pages exist */}
+      {hasMore && (
+        <div ref={loaderRef} className="w-full">
+          {isLoading ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(limit)].map((_, i) => (
+                  <ProjectCardSkeleton key={`skeleton-${page}-${i}`} />
+                ))}
+              </div>
+
+              <div className="flex justify-center items-center py-8">
+                <div className="flex items-center gap-2 text-grey-500">
+                  <div className="w-5 h-5 border-2 border-grey-200 border-t-red rounded-full animate-spin" />
+                  <span className="text-sm">Loading more projects...</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-20" />
+          )}
         </div>
       )}
 
-      {!hasMore && projects.length > initialProjects.length && (
-        <div className="text-center py-4 text-sm text-grey-500">
-          All {projects.length} projects loaded
+      {/* End message */}
+      {!hasMore && projects.length > 0 && (
+        <div className="text-center py-8">
+          <p className="text-sm text-grey-500">
+            ✨ You've seen all{' '}
+            <span className="text-red font-semibold">{filteredProjects.length}</span> projects
+          </p>
         </div>
       )}
     </div>

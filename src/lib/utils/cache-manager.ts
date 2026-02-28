@@ -43,9 +43,15 @@ class SmartCache {
 
   set(key: string, data: any, customTTL?: number): void {
     // Enforce max size (LRU eviction)
-    if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
-      const oldestKey = this.cache.keys().next().value;
-      this.cache.delete(oldestKey);
+    if (this.cache.size >= this.maxSize) {
+      // Only delete oldest if we're adding a new key (not updating existing)
+      if (!this.cache.has(key)) {
+        const oldestKey = this.cache.keys().next().value;
+        // Add a check to ensure oldestKey exists
+        if (oldestKey) {
+          this.cache.delete(oldestKey);
+        }
+      }
     }
 
     const config = this.getConfig(key);

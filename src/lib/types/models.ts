@@ -6,20 +6,35 @@ export interface Story {
   uploadedAt: string;
 }
 
-export interface HeroSection {
+// Main Stats interface
+export interface Stats {
   _id: string;
+  totalLikes: number; // Defaults to 0, min: 0
+  totalVisitors: number; // Defaults to 0, min: 0
+  totalProjects: number; // Total number of projects
+  lastUpdated: Date | string; // Defaults to Date.now
+  createdAt: string; // From timestamps: true
+  updatedAt: string; // From timestamps: true
+}
+// src/lib/types/models.ts
+// src/lib/types/models.ts
+export interface HeroSection {
+  _id?: string; // Made optional
   name: string;
-  title: string;
+  titles: string[];
   profileImage: string;
   shortBio: string;
   hireMe?: boolean;
   socialLinks: SocialLink[];
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  isActive?: boolean; // Made optional
+  createdAt?: string; // Made optional
+  updatedAt?: string; // Made optional
+  visitorCount?: number;
+  projectCount?: number;
+  likeCount?: number;
 }
 export interface Project {
-  id: string;
+  _id: string;
   title: string;
   metaTitle?: string;
   metaDescription?: string;
@@ -74,6 +89,7 @@ export interface SocialLink {
   platform: string;
   url: string;
   icon?: string;
+  order?: number;
 }
 
 export interface BlogPost {

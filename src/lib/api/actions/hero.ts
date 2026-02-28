@@ -1,29 +1,43 @@
 // src/lib/api/actions/hero.ts
-'use server';
-
 import { serverFetch } from '../server-fetch';
+import { ENDPOINTS } from '../endpoints';
 import { HeroSection } from '@/lib/types/models';
 
 export async function getHero() {
   try {
+    // API returns { success: boolean, data: HeroSection }
     const result = await serverFetch<{ success: boolean; data: HeroSection }>({
-      url: '/hero',
-      method: 'GET',
+      url: ENDPOINTS.hero,
     });
 
-    if (result.error || !result.data?.data) {
-      console.error('[getHero] Failed:', result.error);
+    if (result.error) {
+      console.error('[getHero] Error:', result.error);
       return {
         success: false,
         hero: null,
-        error: result.error || 'No hero data received',
+        error: result.error,
       };
     }
 
+    // Check if API response has success flag
+    if (!result.data?.success) {
+      return {
+        success: false,
+        hero: null,
+        error: 'API returned unsuccessful response',
+      };
+    }
+
+    // Extract the hero data from the nested structure
     const hero = result.data.data;
 
-    // Backend now returns full URL, just log it
-    console.log('[getHero] Profile image:', hero.profileImage);
+    if (!hero) {
+      return {
+        success: false,
+        hero: null,
+        error: 'No hero data received',
+      };
+    }
 
     return {
       success: true,

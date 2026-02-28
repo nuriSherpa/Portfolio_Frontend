@@ -3,215 +3,167 @@
 
 import { Story } from '@/lib/types/models';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
 
 interface StoryModalProps {
   stories: Story[];
-  currentIndex: number;
-  isOpen: boolean;
-  onClose: () => void;
-  onNext: () => void;
-  onPrev: () => void;
+  onClose: (viewedStoryIds: string[]) => void;
+  viewedStories: Set<string>;
 }
 
-const fixUrl = (url: string) => url.replace(/&#x2F;/g, '/');
-
-export function StoryModal({
-  stories,
-  currentIndex,
-  isOpen,
-  onClose,
-  onNext,
-  onPrev,
-}: StoryModalProps) {
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
-  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
-
+export function StoryModal({ stories, onClose, viewedStories }: StoryModalProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [viewedInSession, setViewedInSession] = useState<Set<string>>(new Set(viewedStories));
   const currentStory = stories[currentIndex];
-  const totalStories = stories.length;
 
-  // Minimum swipe distance
-  const minSwipeDistance = 50;
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe) {
-      onNext();
-    } else if (isRightSwipe) {
-      onPrev();
+  // Mark current story as viewed
+  useEffect(() => {
+    if (currentStory) {
+      setViewedInSession((prev) => new Set(prev).add(currentStory.id));
     }
+  }, [currentIndex, currentStory]);
+
+  const handleNext = () => {
+    if (currentIndex < stories.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
+    } else {
+      // Close when reaching the end, pass all viewed stories
+      onClose(Array.from(viewedInSession));
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleClose = () => {
+    onClose(Array.from(viewedInSession));
   };
 
   // Keyboard navigation
   useEffect(() => {
-    if (!isOpen) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight') onNext();
-      if (e.key === 'ArrowLeft') onPrev();
+      if (e.key === 'Escape') handleClose();
+      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'ArrowLeft') handlePrev();
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, onNext, onPrev]);
+  }, [currentIndex, viewedInSession]);
 
-  // Prevent body scroll when story is open
+  // Auto-advance
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    const timer = setTimeout(handleNext, 5000);
+    return () => clearTimeout(timer);
+  }, [currentIndex]);
+
+  // Prevent body scroll
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, []);
 
-  // Auto-advance story every 5 seconds (only if current image is loaded)
-  useEffect(() => {
-    if (!isOpen || !loadedImages.has(currentStory?.id)) return;
+  // Format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-    const timer = setTimeout(() => {
-      onNext();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [isOpen, currentIndex, currentStory?.id, loadedImages, onNext]);
-
-  // Preload next images
-  useEffect(() => {
-    if (!isOpen) return;
-
-    // Preload next 2 images
-    for (let i = 1; i <= 2; i++) {
-      const nextIndex = currentIndex + i;
-      if (nextIndex < stories.length) {
-        const nextStory = stories[nextIndex];
-        if (!loadedImages.has(nextStory.id) && !imageErrors.has(nextStory.id)) {
-          const img = new Image();
-          img.src = fixUrl(nextStory.image);
-          img.onload = () => {
-            setLoadedImages((prev) => new Set(prev).add(nextStory.id));
-          };
-          img.onerror = () => {
-            setImageErrors((prev) => new Set(prev).add(nextStory.id));
-          };
-        }
-      }
+    if (diffMins < 60) {
+      return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    } else if (diffDays < 7) {
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    } else {
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
     }
-  }, [isOpen, currentIndex, stories, loadedImages, imageErrors]);
-
-  const handleImageLoad = (storyId: string) => {
-    setLoadedImages((prev) => new Set(prev).add(storyId));
   };
 
-  const handleImageError = (storyId: string) => {
-    console.error('Failed to load story image:', storyId);
-    setImageErrors((prev) => new Set(prev).add(storyId));
-  };
-
-  if (!isOpen || !stories.length || !currentStory) return null;
-
-  const isCurrentImageLoaded = loadedImages.has(currentStory.id);
-  const hasCurrentImageError = imageErrors.has(currentStory.id);
+  if (!stories.length) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
-      onClick={onClose}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      onClick={handleClose}
     >
       {/* Close button */}
       <button
         onClick={(e) => {
           e.stopPropagation();
-          onClose();
+          handleClose();
         }}
-        className="absolute top-4 right-4 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-        aria-label="Close stories"
+        className="absolute top-4 right-4 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white"
       >
         <X size={24} />
       </button>
 
       {/* Navigation arrows */}
-      {totalStories > 1 && (
-        <>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onPrev();
-            }}
-            disabled={currentIndex === 0}
-            className={`absolute left-4 z-50 p-2 rounded-full transition-colors ${
-              currentIndex === 0
-                ? 'bg-white/5 text-white/30 cursor-not-allowed'
-                : 'bg-white/10 hover:bg-white/20 text-white'
-            }`}
-            aria-label="Previous story"
-          >
-            <ChevronLeft size={24} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onNext();
-            }}
-            className="absolute right-4 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-            aria-label="Next story"
-          >
-            <ChevronRight size={24} />
-          </button>
-        </>
+      {stories.length > 1 && currentIndex > 0 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePrev();
+          }}
+          className="absolute left-4 z-50 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white"
+        >
+          <ChevronLeft size={24} />
+        </button>
       )}
 
-      {/* Story counter badge */}
-      {totalStories > 1 && (
-        <div className="absolute top-4 left-4 z-50 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
-          {currentIndex + 1} / {totalStories}
-        </div>
+      {stories.length > 1 && currentIndex < stories.length - 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNext();
+          }}
+          className="absolute right-4 z-50 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white"
+        >
+          <ChevronRight size={24} />
+        </button>
       )}
+
+      {/* Story counter */}
+      <div className="absolute top-4 left-4 z-50 text-white text-sm bg-black/50 px-3 py-1.5 rounded-full">
+        {currentIndex + 1} / {stories.length}
+      </div>
 
       {/* Story content */}
       <div
-        className="relative w-full max-w-md mx-4 bg-black rounded-2xl overflow-hidden shadow-2xl"
+        className="relative w-full max-w-md mx-4 bg-black rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Progress bars */}
-        {totalStories > 1 && (
+        {stories.length > 1 && (
           <div className="absolute top-4 left-4 right-4 flex gap-1 z-10">
             {stories.map((_, idx) => {
-              const isLoaded = loadedImages.has(stories[idx].id);
+              const isViewed = viewedInSession.has(stories[idx].id);
               return (
                 <div key={idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
                   <div
-                    className={`h-full bg-white transition-all duration-500 ${
+                    className={`h-full transition-all duration-500 ${
                       idx < currentIndex
-                        ? 'w-full'
-                        : idx === currentIndex && isLoaded
-                          ? 'w-full animate-progress'
-                          : 'w-0'
+                        ? 'w-full bg-white'
+                        : idx === currentIndex
+                          ? 'w-full bg-white animate-progress'
+                          : isViewed
+                            ? 'w-full bg-white/50'
+                            : 'w-0'
                     }`}
                     style={{
-                      animationDuration: idx === currentIndex && isLoaded ? '5s' : '0s',
+                      animationDuration: idx === currentIndex ? '5s' : '0s',
                     }}
                   />
                 </div>
@@ -221,84 +173,48 @@ export function StoryModal({
         )}
 
         {/* Story image */}
-        <div className="relative aspect-[9/16] w-full bg-black">
-          {/* Image */}
-          <img
-            src={fixUrl(currentStory.image)}
-            alt={currentStory.caption || 'Story image'}
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-              isCurrentImageLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
-            onLoad={() => handleImageLoad(currentStory.id)}
-            onError={() => handleImageError(currentStory.id)}
+        <div className="relative aspect-[9/16] w-full">
+          <Image
+            src={currentStory.image.replace(/&#x2F;/g, '/')}
+            alt={currentStory.caption || 'Story'}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 448px"
+            priority
           />
 
-          {/* Loading indicator */}
-          {!isCurrentImageLoaded && !hasCurrentImageError && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-            </div>
-          )}
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
-          {/* Error state */}
-          {hasCurrentImageError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-grey-900">
-              <div className="text-center text-white/60">
-                <p className="text-sm mb-2">Failed to load image</p>
-                <button
-                  onClick={() => {
-                    setImageErrors((prev) => {
-                      const newSet = new Set(prev);
-                      newSet.delete(currentStory.id);
-                      return newSet;
-                    });
-                    setLoadedImages((prev) => {
-                      const newSet = new Set(prev);
-                      newSet.delete(currentStory.id);
-                      return newSet;
-                    });
-                  }}
-                  className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Caption overlay */}
-          {currentStory.caption && isCurrentImageLoaded && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 pt-20">
-              <p className="text-white text-lg font-medium text-center">{currentStory.caption}</p>
-              <p className="text-white/60 text-sm text-center mt-2">
-                {new Date(currentStory.uploadedAt).toLocaleDateString(undefined, {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
+          {/* Caption and timestamp */}
+          <div className="absolute bottom-0 left-0 right-0 p-6">
+            {currentStory.caption && (
+              <p className="text-white text-lg font-medium mb-2 text-center">
+                {currentStory.caption}
               </p>
-            </div>
-          )}
+            )}
+            <p className="text-white/70 text-sm text-center">
+              {formatDate(currentStory.uploadedAt)}
+            </p>
+          </div>
         </div>
 
-        {/* Tap areas for navigation */}
-        {totalStories > 1 && (
+        {/* Click areas for navigation */}
+        {stories.length > 1 && (
           <>
             <div
-              className="absolute inset-y-0 left-0 w-1/3 cursor-pointer"
+              className="absolute inset-y-0 left-0 w-1/2 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                onPrev();
+                handlePrev();
               }}
-              aria-label="Previous story"
             />
             <div
-              className="absolute inset-y-0 right-0 w-1/3 cursor-pointer"
+              className="absolute inset-y-0 right-0 w-1/2 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                onNext();
+                handleNext();
               }}
-              aria-label="Next story"
             />
           </>
         )}

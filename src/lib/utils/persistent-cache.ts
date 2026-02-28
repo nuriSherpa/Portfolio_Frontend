@@ -107,10 +107,16 @@ export const persistentCache = {
     });
 
     // Limit cache size (LRU)
+    // Limit cache size (LRU)
     if (cache.size > 100) {
       const firstKey = cache.keys().next().value;
-      cache.delete(firstKey);
+      // Add null check - firstKey should exist since cache.size > 100
+      if (firstKey) {
+        cache.delete(firstKey);
+      }
     }
+
+    saveCache(cache);
 
     saveCache(cache);
     console.log(`[Cache SET] ${key} (TTL: ${ttl}ms)`);

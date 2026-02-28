@@ -32,6 +32,7 @@ export function generateSeo({
     description,
     keywords,
     authors: author ? [{ name: author }] : undefined,
+    metadataBase: new URL(siteUrl), // Added: Helps Next.js resolve relative URLs
     alternates: {
       canonical: url,
     },
@@ -41,6 +42,7 @@ export function generateSeo({
       title,
       description,
       siteName: 'Portfolio',
+      locale: 'en_US', // Added: Good for international SEO
       images: [
         {
           url: fullImage,
@@ -58,6 +60,11 @@ export function generateSeo({
       title,
       description,
       images: [fullImage],
+    },
+    robots: {
+      // Added: Explicit crawler permissions
+      index: true,
+      follow: true,
     },
   };
 }

@@ -1,6 +1,8 @@
+// src/lib/api/endpoints.ts
 export const ENDPOINTS = {
-  // Public routes (based on your backend routes)
+  // Public routes
   hero: '/hero',
+  heroStories: '/hero/stories', // Fixed: was '/stories'
   projects: '/projects',
   projectBySlug: (slug: string) => `/project/${slug}`,
   about: '/about',
@@ -8,7 +10,7 @@ export const ENDPOINTS = {
   blogBySlug: (slug: string) => `/blog/${slug}`,
   blogSearch: '/blog/search',
   autocomplete: '/blog/search/autocomplete',
-  visitorInit: '/visitor/init', // NOT /public/visitor/init
+  visitorInit: '/visitor/init',
 
   // Admin routes
   admin: {

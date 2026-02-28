@@ -3,33 +3,42 @@ import { Metadata } from 'next';
 import { Suspense } from 'react';
 import { getProjects } from '@/lib/api/actions/projects';
 import { ProjectsGrid } from '@/components/projects/project-grid';
-import { PageSkeleton } from '@/components/shared/page-skeleton';
+import { ProjectsPageSkeleton } from '@/components/projects/projects-page-skeleton';
 
 export const metadata: Metadata = {
   title: 'Projects | Portfolio',
-  description: 'View my latest projects and work',
+  description: 'Explore my latest projects and work',
 };
 
-const PROJECTS_PER_PAGE = 6;
+export const revalidate = 3600;
 
-export default async function ProjectsPage() {
-  // Only fetch first 6, not all
-  const result = await getProjects({ page: 1, limit: PROJECTS_PER_PAGE });
+// This component fetches data AND renders header + grid
+async function ProjectsContent() {
+  const { projects, pagination } = await getProjects(6, 1);
 
   return (
-    <main className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-12 lg:py-20">
-        <div className="max-w-2xl mx-auto text-center mb-12">
-          <h1 className="text-3xl lg:text-4xl font-bold text-black mb-4">Featured Projects</h1>
-          <p className="text-lg text-grey-600">A selection of my recent work</p>
-        </div>
+    <>
+      {/* Header - Only shows after data is loaded */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold text-red mb-2">Projects</h1>
+        <p className="text-lg text-grey-600 max-w-2xl">
+          A collection of my recent work, side projects, and experiments.
+        </p>
+      </div>
 
-        <Suspense fallback={<PageSkeleton type="projects" />}>
-          <ProjectsGrid
-            initialProjects={result.projects}
-            initialPagination={result.pagination}
-            limit={PROJECTS_PER_PAGE}
-          />
+      {/* Grid */}
+      <ProjectsGrid initialProjects={projects} initialPagination={pagination} limit={6} />
+    </>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <main className="min-h-screen bg-white py-12">
+      <div className="w-[80%] mx-auto">
+        {/* Suspense covers everything - shows skeleton for entire content area */}
+        <Suspense fallback={<ProjectsPageSkeleton />}>
+          <ProjectsContent />
         </Suspense>
       </div>
     </main>

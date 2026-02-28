@@ -1,4 +1,6 @@
 // src/components/projects/project-filter.tsx
+'use client';
+
 interface ProjectFilterProps {
   activeFilter: string;
   onFilterChange: (filter: string) => void;

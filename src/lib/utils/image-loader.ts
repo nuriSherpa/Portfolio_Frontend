@@ -1,52 +1,43 @@
 // src/lib/utils/image-loader.ts
+// Robust image cache with size limit to prevent memory leaks
 class ImageCache {
-  private cache: Map<string, { url: string; loaded: boolean }> = new Map();
-  private maxSize = 30; // Cache up to 30 images
+  private cache: Map<string, boolean> = new Map();
+  private maxSize: number;
 
-  get(url: string): string | null {
-    const cached = this.cache.get(url);
-    return cached?.url || null;
-  }
-
-  set(url: string, loaded: boolean = true) {
-    // Implement LRU: if cache is full, remove oldest
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
-    }
-    this.cache.set(url, { url, loaded });
+  constructor(maxSize = 100) {
+    this.maxSize = maxSize;
   }
 
   has(url: string): boolean {
     return this.cache.has(url);
   }
 
-  markAsLoaded(url: string) {
-    const existing = this.cache.get(url);
-    if (existing) {
-      this.cache.set(url, { ...existing, loaded: true });
+  set(url: string): void {
+    // LRU eviction if cache is full
+    if (this.cache.size >= this.maxSize && !this.cache.has(url)) {
+      const firstKey = this.cache.keys().next().value;
+      // Add null check - firstKey should exist since size >= maxSize > 0
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
     }
+    this.cache.set(url, true);
+  }
+
+  // Optional: Add clear method for cleanup
+  clear(): void {
+    this.cache.clear();
+  }
+
+  // Optional: Get cache size for debugging
+  size(): number {
+    return this.cache.size;
   }
 }
 
-export const imageCache = new ImageCache();
+export const imageCache = new ImageCache(100);
 
-// Generate a tiny blurry placeholder (like Facebook)
+// Tiny blur placeholder
 export const getBlurPlaceholder = (): string => {
-  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Crect width='100%25' height='100%25' fill='%23f5f5f5'/%3E%3C/svg%3E`;
-};
-
-// Preload critical images
-export const preloadImages = (urls: string[]) => {
-  if (typeof window === 'undefined') return;
-
-  urls.forEach((url) => {
-    if (!imageCache.has(url)) {
-      const img = new Image();
-      img.src = url;
-      img.onload = () => {
-        imageCache.set(url);
-      };
-    }
-  });
+  return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiNmM2Y0ZjYiLz48L3N2Zz4=';
 };

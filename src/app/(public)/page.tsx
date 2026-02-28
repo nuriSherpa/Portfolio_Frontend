@@ -1,9 +1,11 @@
 // src/app/(public)/page.tsx
 import { Suspense } from 'react';
 import { HeroSection } from '@/components/hero/hero-section';
+import { HeroSkeleton } from '@/components/hero/hero-skeleton'; // Import directly
 import { getHero } from '@/lib/api/actions/hero';
 import { getHeroStories } from '@/lib/api/actions/story';
-import { PageSkeleton } from '@/components/shared/page-skeleton';
+
+export const revalidate = 3600;
 
 export default async function HomePage() {
   const [heroResult, storiesResult] = await Promise.all([getHero(), getHeroStories()]);
@@ -12,13 +14,16 @@ export default async function HomePage() {
     return <div>Failed to load hero data</div>;
   }
 
+  const stats = {
+    visitorCount: 1248,
+    projectCount: 42,
+    likeCount: 876,
+  };
+
   return (
     <main>
-      <Suspense fallback={<PageSkeleton type="hero" />}>
-        <HeroSection
-          hero={heroResult.hero}
-          initialStories={storiesResult.success ? storiesResult.stories : []}
-        />
+      <Suspense fallback={<HeroSkeleton hero={heroResult.hero} />}>
+        <HeroSection hero={heroResult.hero} stories={storiesResult.stories} stats={stats} />
       </Suspense>
     </main>
   );
