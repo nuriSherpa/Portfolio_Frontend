@@ -28,32 +28,21 @@ export const MorphingText: React.FC<MorphingTextProps> = ({
       const targetText = texts[nextIndex];
 
       // Simple glitch steps
+      // unique charecters
       let step = 0;
+      const glitchChars = '∞¢£¥§±µ¶•ªº¿'.split(''); // Unique glitch characters
       const glitchInterval = setInterval(() => {
         step++;
 
-        if (step === 1) {
-          // First glitch - slight shift
+        if (step <= 3) {
+          // Apply glitch effect for steps 1-3
+          const glitchIntensity = step === 3 ? 0.6 : 0.7; // Higher intensity for step 3
+          const randomChar = () => glitchChars[Math.floor(Math.random() * glitchChars.length)];
+
           setDisplayText(
             targetText
               .split('')
-              .map((char) => (Math.random() > 0.7 ? '0' : char))
-              .join(''),
-          );
-        } else if (step === 2) {
-          // Second glitch - different pattern
-          setDisplayText(
-            targetText
-              .split('')
-              .map((char) => (Math.random() > 0.7 ? '1' : char))
-              .join(''),
-          );
-        } else if (step === 3) {
-          // Third glitch - mix
-          setDisplayText(
-            targetText
-              .split('')
-              .map((char) => (Math.random() > 0.6 ? (Math.random() > 0.5 ? '0' : '1') : char))
+              .map((char) => (Math.random() > glitchIntensity ? randomChar() : char))
               .join(''),
           );
         } else {
@@ -81,7 +70,7 @@ export const MorphingText: React.FC<MorphingTextProps> = ({
       style={{
         color: '#bf1e2d', // Your red color always
         transform: isGlitching ? 'skew(-0.5deg) translate(1px, 0)' : 'none',
-        transition: 'transform 0.1s ease',
+        transition: 'transform 0.25s ease',
       }}
     >
       {displayText}

@@ -7,6 +7,7 @@ import { ProjectCard } from './project-card';
 import { ProjectCardSkeleton } from './project-card-skeleton';
 import { ProjectFilter } from './project-filter';
 import { getProjects } from '@/lib/api/actions/projects';
+import { ArrowUp } from 'lucide-react';
 
 interface ProjectsGridProps {
   initialProjects: Project[];
@@ -23,143 +24,191 @@ const MemoizedProjectCard = memo(ProjectCard);
 
 export function ProjectsGrid({ initialProjects, initialPagination, limit }: ProjectsGridProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [page, setPage] = useState(2);
-  const [hasMore, setHasMore] = useState(initialPagination?.hasNextPage ?? false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(initialPagination?.totalPages || 1);
   const [isLoading, setIsLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [loadingPage, setLoadingPage] = useState<number | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const isFetchingRef = useRef(false);
-  const loaderRef = useRef<HTMLDivElement>(null);
-  const hasScrolled = useRef(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadedPagesRef = useRef<Set<number>>(new Set([1]));
 
-  // Local filtering
+  // ============================
+  // SCROLL TO TOP FUNCTION
+  // ============================
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }, []);
+
+  // ============================
+  // SCROLL POSITION TRACKING
+  // ============================
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    handleScroll();
+
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ============================
+  // LOAD SPECIFIC PAGE
+  // ============================
+  const loadPage = useCallback(
+    async (pageToLoad: number) => {
+      if (
+        isFetchingRef.current ||
+        loadedPagesRef.current.has(pageToLoad) ||
+        pageToLoad > totalPages
+      ) {
+        return;
+      }
+
+      isFetchingRef.current = true;
+      setIsLoading(true);
+      setLoadingPage(pageToLoad);
+
+      try {
+        const result = await getProjects(limit, pageToLoad);
+
+        if (result.projects.length > 0) {
+          loadedPagesRef.current.add(pageToLoad);
+
+          setProjects((prev) => {
+            const ids = new Set(prev.map((p) => p._id));
+            const newProjects = result.projects.filter((p) => !ids.has(p._id));
+            return [...prev, ...newProjects];
+          });
+
+          setCurrentPage(pageToLoad);
+          setTotalPages(result.pagination?.totalPages || totalPages);
+        }
+      } catch (err) {
+        console.error(`Failed to load page ${pageToLoad}:`, err);
+      } finally {
+        setIsLoading(false);
+        setLoadingPage(null);
+        isFetchingRef.current = false;
+      }
+    },
+    [limit, totalPages],
+  );
+
+  // ============================
+  // INTERSECTION OBSERVER SETUP
+  // ============================
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    if (currentPage >= totalPages) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+
+        if (entry.isIntersecting && !isFetchingRef.current) {
+          const nextPage = currentPage + 1;
+          if (nextPage <= totalPages && !loadedPagesRef.current.has(nextPage)) {
+            loadPage(nextPage);
+          }
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px',
+        threshold: 0,
+      },
+    );
+
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+      observerRef.current.observe(currentSentinel);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [currentPage, totalPages, loadPage]);
+
+  // ============================
+  // FILTER HANDLING
+  // ============================
+  const handleFilterChange = useCallback((filter: string) => {
+    setActiveFilter(filter);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const filteredProjects = useMemo(() => {
     if (activeFilter === 'all') return projects;
     return projects.filter((p) => p.projectStatus === activeFilter);
   }, [projects, activeFilter]);
 
-  // Only load more when user has scrolled and loader is visible
-  useEffect(() => {
-    if (!loaderRef.current || !hasMore || isLoading) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        // Only trigger if user has scrolled (not on initial load) and not already fetching
-        if (entry.isIntersecting && !isFetchingRef.current && hasScrolled.current) {
-          loadMore();
-        }
-      },
-      {
-        threshold: 0,
-        rootMargin: '100px',
-      },
-    );
-
-    observer.observe(loaderRef.current);
-
-    return () => observer.disconnect();
-  }, [hasMore, isLoading]);
-
-  // Track scroll to prevent initial load trigger
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 100) {
-        hasScrolled.current = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const loadMore = useCallback(async () => {
-    if (isFetchingRef.current || !hasMore) return;
-
-    isFetchingRef.current = true;
-    setIsLoading(true);
-
-    try {
-      const result = await getProjects(limit, page);
-
-      if (result.projects.length > 0) {
-        setProjects((prev) => {
-          const existingIds = new Set(prev.map((p) => p._id));
-          const newProjects = result.projects.filter((p) => !existingIds.has(p._id));
-          return [...prev, ...newProjects];
-        });
-
-        setPage((p) => p + 1);
-        setHasMore(result.pagination?.hasNextPage ?? false);
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error('Load failed:', error);
-    } finally {
-      setIsLoading(false);
-      isFetchingRef.current = false;
-    }
-  }, [page, limit, hasMore]);
-
-  const handleFilterChange = useCallback((filter: string) => {
-    setActiveFilter(filter);
-  }, []);
-
-  if (!projects.length) {
-    return (
-      <div className="text-center py-20">
-        <div className="bg-white border border-grey-200 rounded-xl p-8 max-w-md mx-auto">
-          <h3 className="text-lg font-semibold text-black mb-2">No projects yet</h3>
-        </div>
-      </div>
-    );
-  }
-
+  // ============================
+  // RENDER
+  // ============================
   return (
-    <div className="space-y-8 w-full">
-      <ProjectFilter activeFilter={activeFilter} onFilterChange={handleFilterChange} />
+    <div className="w-full pb-20">
+      <div className="space-y-8">
+        <ProjectFilter activeFilter={activeFilter} onFilterChange={handleFilterChange} />
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProjects.map((project) => (
-          <MemoizedProjectCard key={project._id} project={project} />
-        ))}
-      </div>
+        {/* Projects Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProjects.map((project) => (
+            <MemoizedProjectCard key={project._id} project={project} />
+          ))}
+        </div>
 
-      {/* Loading Area - Only show loader if more pages exist */}
-      {hasMore && (
-        <div ref={loaderRef} className="w-full">
-          {isLoading ? (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(limit)].map((_, i) => (
-                  <ProjectCardSkeleton key={`skeleton-${page}-${i}`} />
-                ))}
-              </div>
+        {/* Loading indicator and sentinel */}
+        {currentPage < totalPages && (
+          <>
+            <div ref={sentinelRef} className="w-full h-10" aria-hidden="true" />
 
-              <div className="flex justify-center items-center py-8">
-                <div className="flex items-center gap-2 text-grey-500">
-                  <div className="w-5 h-5 border-2 border-grey-200 border-t-red rounded-full animate-spin" />
-                  <span className="text-sm">Loading more projects...</span>
+            {isLoading && loadingPage === currentPage + 1 && (
+              <div className="w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...Array(3)].map((_, i) => (
+                    <ProjectCardSkeleton key={`skeleton-${loadingPage}-${i}`} />
+                  ))}
+                </div>
+                <div className="flex justify-center items-center py-6">
+                  <div className="flex items-center gap-2 text-grey-500">
+                    <div className="w-4 h-4 border-2 border-grey-200 border-t-red rounded-full animate-spin" />
+                    <span className="text-sm">
+                      Loading page {loadingPage} of {totalPages}...
+                    </span>
+                  </div>
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="h-20" />
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
 
-      {/* End message */}
-      {!hasMore && projects.length > 0 && (
-        <div className="text-center py-8">
-          <p className="text-sm text-grey-500">
-            ✨ You've seen all{' '}
-            <span className="text-red font-semibold">{filteredProjects.length}</span> projects
-          </p>
-        </div>
-      )}
+        {/* End of content with Go to Top button */}
+        {currentPage >= totalPages && projects.length > 0 && showScrollTop && (
+          <div className="flex justify-center py-12">
+            <button
+              onClick={scrollToTop}
+              className="bg-red text-white px-6 py-3 rounded-full font-medium flex items-center gap-2 hover:bg-red/90 transition-colors"
+            >
+              <ArrowUp size={18} />
+              Go to Top
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,39 +1,36 @@
 // src/lib/api/actions/story.ts
 import { serverFetch } from '../server-fetch';
-import { ENDPOINTS } from '../endpoints';
 import { Story } from '@/lib/types/models';
 
+interface StoriesApiResponse {
+  success: boolean;
+  count: number;
+  data: Story[];
+}
+
+/**
+ * Fetch hero stories using serverFetch - no caching
+ */
 export async function getHeroStories() {
   try {
-    // API returns { success: boolean; count: number; data: Story[] }
-    const result = await serverFetch<{ success: boolean; count: number; data: Story[] }>({
-      url: ENDPOINTS.heroStories,
+    console.log('[getHeroStories] Fetching from endpoint: /hero/stories');
+
+    const result = await serverFetch<StoriesApiResponse>({
+      url: '/hero/stories', // Just the path - serverFetch adds the base URL
+      method: 'GET',
     });
 
     if (result.error) {
-      console.error('[getHeroStories] Error:', result.error);
-      return {
-        success: false,
-        stories: [],
-        error: result.error,
-      };
+      throw new Error(result.error);
     }
 
-    // Check if API response has success flag
     if (!result.data?.success) {
-      return {
-        success: false,
-        stories: [],
-        error: 'API returned unsuccessful response',
-      };
+      throw new Error('API returned unsuccessful response');
     }
-
-    // Extract the stories array from the nested structure
-    const stories = result.data.data || [];
 
     return {
       success: true,
-      stories,
+      stories: result.data.data || [],
       error: null,
     };
   } catch (error: any) {
@@ -44,4 +41,17 @@ export async function getHeroStories() {
       error: error.message,
     };
   }
+}
+
+/**
+ * Alias for getHeroStories - always fresh
+ */
+export const getHeroStoriesFresh = getHeroStories;
+
+/**
+ * No-op function for compatibility (does nothing)
+ */
+export function invalidateStoriesCache() {
+  console.log('[invalidateStoriesCache] No-op - caching disabled');
+  // Do nothing - caching is removed
 }

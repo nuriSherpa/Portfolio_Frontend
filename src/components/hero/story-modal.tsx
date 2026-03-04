@@ -5,6 +5,7 @@ import { Story } from '@/lib/types/models';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { getImageUrl } from '@/lib/utils/image-url';
 
 interface StoryModalProps {
   stories: Story[];
@@ -175,7 +176,7 @@ export function StoryModal({ stories, onClose, viewedStories }: StoryModalProps)
         {/* Story image */}
         <div className="relative aspect-[9/16] w-full">
           <Image
-            src={currentStory.image.replace(/&#x2F;/g, '/')}
+            src={getImageUrl(currentStory.image)}
             alt={currentStory.caption || 'Story'}
             fill
             className="object-cover"

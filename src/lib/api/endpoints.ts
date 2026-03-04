@@ -2,7 +2,7 @@
 export const ENDPOINTS = {
   // Public routes
   hero: '/hero',
-  heroStories: '/hero/stories', // Fixed: was '/stories'
+  heroStories: '/hero/stories',
   projects: '/projects',
   projectBySlug: (slug: string) => `/project/${slug}`,
   about: '/about',
