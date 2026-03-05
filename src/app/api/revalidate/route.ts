@@ -18,16 +18,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Section required' }, { status: 400 });
   }
 
-  console.log(`📬 Revalidation request: ${section}`);
-  console.log(`🔍 Cache before: ${memoryCache.size} entries`);
-
   // 1. Clear Next.js built-in cache using the 'max' profile
   const tags = section === 'all' ? ['hero', 'projects', 'stories'] : [section];
   tags.forEach((tag) => {
     try {
       // Use the 'max' profile which is built-in
       revalidateTag(tag, 'max');
-      console.log(`✅ Next.js tag: ${tag} with profile 'max'`);
     } catch (error) {
       console.error(`❌ Failed to revalidate tag ${tag}:`, error);
     }
@@ -42,21 +38,16 @@ export async function POST(request: NextRequest) {
   } else {
     // Clear specific section and related patterns
     const patterns: Record<string, string[]> = {
-      hero: ['hero', 'stories:hero'],
+      hero: ['hero'],
       projects: ['projects:list', 'projects:slug', 'projects:detail', 'projects:fresh'],
-      stories: ['stories', 'stories:hero'],
     };
 
     const patternsToClear = patterns[section] || [section];
     patternsToClear.forEach((pattern) => {
       const count = invalidateCache(pattern);
       clearedCount += count;
-      console.log(`🧹 Pattern "${pattern}" cleared ${count} entries`);
     });
   }
-
-  console.log(`🧹 Total cleared: ${clearedCount} custom cache entries`);
-  console.log(`🔍 Cache after: ${memoryCache.size} entries`);
 
   return NextResponse.json({
     success: true,

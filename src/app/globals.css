@@ -45,27 +45,28 @@
   --radius-md: 0px;
   --radius-lg: 0px;
   --radius-xl: 0px;
+
+  /* Font family - use the CSS variable from next/font */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-white text-black antialiased;
-  }
+
   html {
     scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-black antialiased;
+    /* Apply font family explicitly */
+    font-family: var(--font-sans);
   }
 }
 
-/* Add to globals.css */
 @layer utilities {
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-
   /* GPU acceleration for cards */
   .will-change-transform {
     will-change: transform;

@@ -1,25 +1,23 @@
 // src/lib/utils/image-url.ts
-export const getImageUrl = (url: string | undefined): string => {
-  if (!url || url === 'undefined' || url === 'null' || url === '') {
-    return '';
+export function getImageUrl(path: string | null | undefined): string {
+  if (!path) return '';
+
+  // If it's a full URL with localhost, extract just the path for rewrites
+  if (path.includes('localhost')) {
+    try {
+      const url = new URL(path);
+      return url.pathname; // Returns '/uploads/about/...'
+    } catch {
+      // If URL parsing fails, return as is
+      return path;
+    }
   }
 
-  // Decode HTML entities
-  const decoded = url.replace(/&#x2F;/g, '/').replace(/&amp;/g, '&');
-
-  // Convert any localhost URL to local path
-  // http://localhost:80/uploads/... → /uploads/...
-  // http://localhost/uploads/... → /uploads/...
-  // http://127.0.0.1:80/uploads/... → /uploads/...
-  if (decoded.includes('localhost') || decoded.includes('127.0.0.1')) {
-    const urlObj = new URL(decoded);
-    return urlObj.pathname; // Returns /uploads/...
+  // If it's already a path starting with /uploads, use it directly
+  if (path.startsWith('/uploads')) {
+    return path;
   }
 
-  // Already local path
-  if (decoded.startsWith('/uploads/')) {
-    return decoded;
-  }
-
-  return decoded;
-};
+  // Otherwise, assume it's a filename and construct the path
+  return `/uploads/${path}`;
+}
