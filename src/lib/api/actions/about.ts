@@ -31,7 +31,6 @@ export async function getAbout() {
       error: null,
     };
   } catch (error: any) {
-    console.error('[getAbout] Error:', error.message);
     return {
       success: false,
       about: null,

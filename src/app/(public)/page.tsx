@@ -22,9 +22,11 @@ export default async function HomePage() {
 
   return (
     <main>
-      <Suspense fallback={<HeroSkeleton hero={heroResult.hero} />}>
-        <HeroSection hero={heroResult.hero} stories={storiesResult.stories} stats={stats} />
-      </Suspense>
+      <div className="w-[80%] mx-auto">
+        <Suspense fallback={<HeroSkeleton hero={heroResult.hero} />}>
+          <HeroSection hero={heroResult.hero} stories={storiesResult.stories} stats={stats} />
+        </Suspense>
+      </div>
     </main>
   );
 }

@@ -20,7 +20,6 @@ export function Footer() {
   const currentYear = new Date().getFullYear();
   const pathname = usePathname();
 
-  // Normalize path for comparison (remove trailing slash except for root)
   const normalizePath = (path: string) => {
     if (path === '/') return '/';
     return path.replace(/\/$/, '');
@@ -30,8 +29,6 @@ export function Footer() {
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     const normalizedHref = normalizePath(href);
-
-    // If same page, prevent navigation and scroll to top
     if (currentPath === normalizedHref) {
       e.preventDefault();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -39,8 +36,9 @@ export function Footer() {
   };
 
   return (
-    <footer className="border-t border-grey-200 bg-white">
-      <div className="container mx-auto px-4 md:px-6 py-12">
+    <footer className="border-t border-grey-200 bg-white w-full">
+      {/* 80% width container - matches RootLayout exactly */}
+      <div className="w-[80%] max-w-6xl mx-auto py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
           {/* Brand */}
           <div className="space-y-4">

@@ -32,7 +32,6 @@ export async function getHero() {
       error: null,
     };
   } catch (error: any) {
-    console.error('[getHero] Error:', error.message);
     return {
       success: false,
       hero: null,
