@@ -2,6 +2,7 @@
 'use client';
 
 import { Users, Box, ThumbsUp } from 'lucide-react';
+import { AiOutlineLike } from 'react-icons/ai';
 import { useState, useEffect } from 'react';
 
 function formatNumber(num: number): string {

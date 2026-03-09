@@ -1,14 +1,13 @@
-// src/app/about/page.tsx - IMPROVED VERSION
+// src/app/about/page.tsx - COMPLETE SSR VERSION
 import { Metadata } from 'next';
-import { Suspense } from 'react';
-import { getAbout } from '@/lib/api/actions/about';
-import { AboutClient } from '@/components/about/about-client';
-import { AboutSkeleton } from '@/components/about/about-skeleton';
 import { notFound } from 'next/navigation';
+import { getAbout } from '@/lib/api/actions/about';
+import { AboutView } from '@/components/about/about-view'; // No 'use client'!
+import { Suspense } from 'react';
+import { AboutSkeleton } from '@/components/about/about-skeleton';
 
-// Force static generation with ISR
 export const dynamic = 'force-static';
-export const revalidate = 3600; // 1 hour
+export const revalidate = 3600;
 
 export async function generateMetadata(): Promise<Metadata> {
   const { about } = await getAbout();
@@ -33,23 +32,19 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// Server Component - data is fetched and cached at build time
-async function AboutContent() {
+// ✅ PURE SERVER COMPONENT - Zero client JS
+export default async function AboutPage() {
   const { about, error } = await getAbout();
 
   if (error || !about) {
     notFound();
   }
 
-  // Pass pre-rendered data to client component
-  return <AboutClient about={about} />;
-}
-
-export default function AboutPage() {
+  // Server-rendered HTML sent to browser - no hydration needed
   return (
     <div className="w-[80%] mx-auto">
       <Suspense fallback={<AboutSkeleton />}>
-        <AboutContent />
+        <AboutView about={about} />
       </Suspense>
     </div>
   );

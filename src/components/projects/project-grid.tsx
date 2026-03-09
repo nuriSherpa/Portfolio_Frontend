@@ -7,7 +7,8 @@ import { ProjectCard } from './project-card';
 import { ProjectCardSkeleton } from './project-card-skeleton';
 import { ProjectFilter } from './project-filter';
 import { getProjects } from '@/lib/api/actions/projects';
-import { ArrowUp } from 'lucide-react';
+import { ScrollToTopButton } from '../shared/scroll-to-top-button';
+import { globalCache } from '@/lib/cache/cache';
 
 interface ProjectsGridProps {
   initialProjects: Project[];
@@ -21,33 +22,121 @@ interface ProjectsGridProps {
 }
 
 const MemoizedProjectCard = memo(ProjectCard);
+const CACHE_KEY_ALL = 'projects-all';
+const CACHE_KEY_PAGE = (page: number) => `projects-page-${page}`;
 
 export function ProjectsGrid({ initialProjects, initialPagination, limit }: ProjectsGridProps) {
+  // Use SSR data as initial state if available
+  const hasSSRData = initialProjects.length > 0;
+
   const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(hasSSRData ? 1 : 1);
   const [totalPages, setTotalPages] = useState(initialPagination?.totalPages || 1);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(!hasSSRData); // Only loading if no SSR data
   const [activeFilter, setActiveFilter] = useState('all');
   const [loadingPage, setLoadingPage] = useState<number | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // CRITICAL: Use ref to prevent double initialization
+  const isInitializedRef = useRef(false);
   const isFetchingRef = useRef(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const loadedPagesRef = useRef<Set<number>>(new Set([1]));
+  const loadedPagesRef = useRef<Set<number>>(new Set(hasSSRData ? [1] : []));
 
   // ============================
-  // SCROLL TO TOP FUNCTION
+  // INITIALIZE: SSR or Cache or Fetch
   // ============================
-  const scrollToTop = useCallback(() => {
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
-  }, []);
+  useEffect(() => {
+    // PREVENT DOUBLE INITIALIZATION (React StrictMode)
+    if (isInitializedRef.current) {
+      console.log('[Init] Already initialized, skipping');
+      return;
+    }
+    isInitializedRef.current = true;
+
+    const initialize = async () => {
+      try {
+        // 1. HAS SSR DATA: Save to cache and restore scroll
+        if (hasSSRData) {
+          console.log('[Init] Using SSR data, saving to cache');
+
+          await globalCache.set(
+            CACHE_KEY_ALL,
+            {
+              projects: initialProjects,
+              currentPage: 1,
+              totalPages: initialPagination?.totalPages || 1,
+              loadedPages: [1],
+            },
+            1000 * 60 * 60,
+          );
+
+          // Check for scroll position (back navigation)
+          const savedScroll = sessionStorage.getItem('projects-scroll-position');
+          if (savedScroll) {
+            setTimeout(() => {
+              window.scrollTo(0, parseInt(savedScroll));
+              sessionStorage.removeItem('projects-scroll-position');
+            }, 100);
+          }
+
+          return;
+        }
+
+        // 2. NO SSR DATA: Check client cache
+        const cached = await globalCache.get<any>(CACHE_KEY_ALL);
+        const hasScrollPosition = sessionStorage.getItem('projects-scroll-position') !== null;
+
+        if (cached && cached.projects.length > 0) {
+          console.log(`[Client Cache] Restoring ${cached.projects.length} projects`);
+
+          setProjects(cached.projects);
+          setCurrentPage(cached.currentPage);
+          setTotalPages(cached.totalPages);
+          loadedPagesRef.current = new Set(cached.loadedPages || [1]);
+
+          if (hasScrollPosition) {
+            const savedScroll = sessionStorage.getItem('projects-scroll-position');
+            setTimeout(() => {
+              window.scrollTo(0, parseInt(savedScroll!));
+              sessionStorage.removeItem('projects-scroll-position');
+            }, 100);
+          }
+        } else {
+          // 3. NO CACHE: Fetch from server
+          console.log('[Init] No SSR, no cache - fetching from server');
+          const result = await getProjects(limit, 1);
+
+          if (result.projects.length > 0) {
+            loadedPagesRef.current.add(1);
+            setProjects(result.projects);
+            setTotalPages(result.pagination?.totalPages || 1);
+
+            await globalCache.set(
+              CACHE_KEY_ALL,
+              {
+                projects: result.projects,
+                currentPage: 1,
+                totalPages: result.pagination?.totalPages || 1,
+                loadedPages: [1],
+              },
+              1000 * 60 * 60,
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[Init] Error:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initialize();
+  }, [hasSSRData, initialProjects, initialPagination, limit]);
 
   // ============================
-  // SCROLL POSITION TRACKING
+  // SCROLL TRACKING
   // ============================
   useEffect(() => {
     const handleScroll = () => {
@@ -61,7 +150,7 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   }, []);
 
   // ============================
-  // LOAD SPECIFIC PAGE
+  // LOAD PAGE (Client Cache → Server)
   // ============================
   const loadPage = useCallback(
     async (pageToLoad: number) => {
@@ -73,6 +162,28 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
         return;
       }
 
+      // Try client cache first
+      try {
+        const cached = await globalCache.get<any>(CACHE_KEY_PAGE(pageToLoad));
+        if (cached?.projects) {
+          console.log(`[Client Cache] Page ${pageToLoad} hit`);
+          loadedPagesRef.current.add(pageToLoad);
+
+          setProjects((prev) => {
+            const ids = new Set(prev.map((p) => p._id));
+            const newProjects = cached.projects.filter((p: Project) => !ids.has(p._id));
+            return [...prev, ...newProjects];
+          });
+
+          setCurrentPage(pageToLoad);
+          return;
+        }
+      } catch (e) {
+        console.error('[Client Cache] Read error:', e);
+      }
+
+      // Fetch from server
+      console.log(`[Client Cache] Page ${pageToLoad} miss, fetching server...`);
       isFetchingRef.current = true;
       setIsLoading(true);
       setLoadingPage(pageToLoad);
@@ -91,6 +202,15 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
 
           setCurrentPage(pageToLoad);
           setTotalPages(result.pagination?.totalPages || totalPages);
+
+          await globalCache.set(
+            CACHE_KEY_PAGE(pageToLoad),
+            {
+              projects: result.projects,
+              pagination: result.pagination,
+            },
+            1000 * 60 * 60,
+          );
         }
       } catch (err) {
         console.error(`Failed to load page ${pageToLoad}:`, err);
@@ -104,7 +224,33 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   );
 
   // ============================
-  // INTERSECTION OBSERVER SETUP
+  // CLIENT CACHE: Save on changes
+  // ============================
+  useEffect(() => {
+    if (projects.length === 0) return;
+
+    const saveCache = async () => {
+      try {
+        await globalCache.set(
+          CACHE_KEY_ALL,
+          {
+            projects,
+            currentPage,
+            totalPages,
+            loadedPages: Array.from(loadedPagesRef.current),
+          },
+          1000 * 60 * 60,
+        );
+      } catch (e) {
+        console.error('[Client Cache] Save error:', e);
+      }
+    };
+
+    saveCache();
+  }, [projects, currentPage, totalPages]);
+
+  // ============================
+  // INTERSECTION OBSERVER
   // ============================
   useEffect(() => {
     if (observerRef.current) {
@@ -116,7 +262,6 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
     observerRef.current = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-
         if (entry.isIntersecting && !isFetchingRef.current) {
           const nextPage = currentPage + 1;
           if (nextPage <= totalPages && !loadedPagesRef.current.has(nextPage)) {
@@ -124,27 +269,18 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
           }
         }
       },
-      {
-        root: null,
-        rootMargin: '200px',
-        threshold: 0,
-      },
+      { root: null, rootMargin: '200px', threshold: 0 },
     );
 
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-      observerRef.current.observe(currentSentinel);
+    if (sentinelRef.current) {
+      observerRef.current.observe(sentinelRef.current);
     }
 
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
+    return () => observerRef.current?.disconnect();
   }, [currentPage, totalPages, loadPage]);
 
   // ============================
-  // FILTER HANDLING
+  // FILTER
   // ============================
   const handleFilterChange = useCallback((filter: string) => {
     setActiveFilter(filter);
@@ -159,23 +295,34 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   // ============================
   // RENDER
   // ============================
+  if (isLoading && projects.length === 0) {
+    return (
+      <div className="w-full pb-20">
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <ProjectCardSkeleton key={`initial-skeleton-${i}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full pb-20">
       <div className="space-y-8">
         <ProjectFilter activeFilter={activeFilter} onFilterChange={handleFilterChange} />
 
-        {/* Projects Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => (
             <MemoizedProjectCard key={project._id} project={project} />
           ))}
         </div>
 
-        {/* Loading indicator and sentinel */}
         {currentPage < totalPages && (
           <>
             <div ref={sentinelRef} className="w-full h-10" aria-hidden="true" />
-
             {isLoading && loadingPage === currentPage + 1 && (
               <div className="w-full">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -186,9 +333,7 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
                 <div className="flex justify-center items-center py-6">
                   <div className="flex items-center gap-2 text-grey-500">
                     <div className="w-4 h-4 border-2 border-grey-200 border-t-red rounded-full animate-spin" />
-                    <span className="text-sm">
-                      Loading page {loadingPage} of {totalPages}...
-                    </span>
+                    <span className="text-sm">Loading page {loadingPage}...</span>
                   </div>
                 </div>
               </div>
@@ -196,18 +341,7 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
           </>
         )}
 
-        {/* End of content with Go to Top button */}
-        {currentPage >= totalPages && projects.length > 0 && showScrollTop && (
-          <div className="flex justify-center py-12">
-            <button
-              onClick={scrollToTop}
-              className="bg-red text-white px-6 py-3 rounded-full font-medium flex items-center gap-2 hover:bg-red/90 transition-colors"
-            >
-              <ArrowUp size={18} />
-              Go to Top
-            </button>
-          </div>
-        )}
+        {currentPage >= totalPages && projects.length > 0 && showScrollTop && <ScrollToTopButton />}
       </div>
     </div>
   );

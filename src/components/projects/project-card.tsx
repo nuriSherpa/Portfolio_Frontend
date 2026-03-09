@@ -1,9 +1,13 @@
 // src/components/projects/project-card.tsx
+'use client';
+
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { Project } from '@/lib/types/models';
 import Image from 'next/image';
 import { getImageUrl } from '@/lib/utils/image-url';
+import { globalCache } from '@/lib/cache/cache';
+import { useRef, useCallback } from 'react';
 
 interface ProjectCardProps {
   project: Project;
@@ -20,9 +24,49 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const allTechs = project.technologies || [];
   const status = project.projectStatus || 'planning';
 
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // SMART HOVER: Only check LOCAL cache, NO server request!
+  const handleMouseEnter = useCallback(() => {
+    if (!project.slug) return;
+
+    // Clear existing timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+
+    // Check local cache after 300ms (only if still hovering)
+    hoverTimeoutRef.current = setTimeout(async () => {
+      const cacheKey = `project-detail-${project.slug}`;
+      const cached = await globalCache.get(cacheKey);
+
+      if (cached) {
+        console.log(`[Smart Hover] Local cache HIT: ${project.title}`);
+      } else {
+        console.log(`[Smart Hover] Local cache MISS: ${project.title}`);
+      }
+    }, 300);
+  }, [project.slug, project.title]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Save scroll position on click
+  const handleClick = () => {
+    sessionStorage.setItem('projects-scroll-position', window.scrollY.toString());
+  };
+
   return (
-    <article className="group bg-white border border-grey-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
-      {/* Image - fixed height */}
+    <article
+      className="group bg-white border border-grey-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex-col"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Image */}
       <div className="relative w-full bg-grey-100 overflow-hidden flex-shrink-0 h-[180px] sm:h-[200px]">
         <div className="absolute top-2 sm:top-3 left-2 sm:left-3 z-20">
           <span className="bg-red text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full capitalize shadow-sm font-medium">
@@ -30,7 +74,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </span>
         </div>
 
-        <Link href={`/projects/${project.slug || '#'}`} className="block w-full h-full">
+        <Link
+          href={`/projects/${project.slug || '#'}`}
+          className="block w-full h-full"
+          onClick={handleClick}
+        >
           <div className="relative w-full h-full">
             {hasImage ? (
               <Image
@@ -62,9 +110,9 @@ export function ProjectCard({ project }: ProjectCardProps) {
         )}
       </div>
 
-      {/* Content - adjusted padding for phone */}
+      {/* Content */}
       <div className="p-3 sm:p-4 flex-1 flex flex-col">
-        <Link href={`/projects/${project.slug || '#'}`} className="block">
+        <Link href={`/projects/${project.slug || '#'}`} className="block" onClick={handleClick}>
           <h3 className="font-semibold text-black group-hover:text-red transition-colors duration-200 text-sm sm:text-base">
             {project.title || 'Untitled'}
           </h3>
@@ -73,9 +121,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </p>
         </Link>
 
-        {/* Tech tags - reduced top margin on phone */}
         <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-4">
-          {/* Show first 3 tags always */}
           {allTechs.slice(0, 3).map((tech, i) => (
             <span
               key={`${project._id}-tech-${i}`}
@@ -84,8 +130,6 @@ export function ProjectCard({ project }: ProjectCardProps) {
               {tech.name}
             </span>
           ))}
-
-          {/* If there are more than 3 tags, show +X */}
           {allTechs.length > 3 && (
             <span className="text-[0.65rem] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red/10 text-red rounded-full font-semibold whitespace-nowrap">
               +{allTechs.length - 3}
