@@ -22,11 +22,9 @@ export function ScrollToTopButton() {
         onMouseLeave={() => iconRef.current?.stopAnimation()}
         className="group inline-flex items-center gap-2"
       >
-        {/* Arrow only - no box, larger size to match text height */}
-        <ArrowUpIcon ref={iconRef} size={44} className="text-red" />
-
         {/* Text - red background, white text */}
-        <span className="flex items-center h-11 px-4 bg-red text-white rounded-lg font-medium">
+        <span className="flex items-center gap-2 h-11 px-4 bg-red text-white rounded-lg font-medium text-base">
+          <ArrowUpIcon ref={iconRef} size={18} className="text-white" />
           Go to Top
         </span>
       </button>

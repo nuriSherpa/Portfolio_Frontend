@@ -93,7 +93,7 @@ export interface SocialLink {
 }
 
 export interface BlogPost {
-  id: string;
+  _id: string;
   title: string;
   slug: string;
   excerpt: string;
