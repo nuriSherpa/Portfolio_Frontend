@@ -32,7 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// ✅ PURE SERVER COMPONENT - Zero client JS
+
 export default async function AboutPage() {
   const { about, error } = await getAbout();
 

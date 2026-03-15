@@ -4,6 +4,7 @@ import { getPostBySlug } from '@/lib/api/actions/posts';
 import { BlogPostContent } from '@/components/blog/blog-post-content';
 import { BlogPostSidebar } from '@/components/blog/blog-post-sidebar';
 import { BlogPostHeader } from '@/components/blog/blog-post-header';
+import { ScrollToTopButton } from '@/components/shared/scroll-to-top-button';
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }> | { slug: string };
@@ -68,6 +69,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <BlogPostSidebar post={post} />
           </aside>
         </div>
+        <ScrollToTopButton />
       </div>
     </main>
   );

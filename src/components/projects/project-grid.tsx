@@ -24,6 +24,8 @@ interface ProjectsGridProps {
 const MemoizedProjectCard = memo(ProjectCard);
 const CACHE_KEY_ALL = 'projects-all';
 const CACHE_KEY_PAGE = (page: number) => `projects-page-${page}`;
+const SCROLL_POS_KEY = 'projects-scroll-position';
+const SCROLL_RESTORED_KEY = 'projects-scroll-restored';
 
 export function ProjectsGrid({ initialProjects, initialPagination, limit }: ProjectsGridProps) {
   // Use SSR data as initial state if available
@@ -43,6 +45,64 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadedPagesRef = useRef<Set<number>>(new Set(hasSSRData ? [1] : []));
+  const scrollRestoredRef = useRef(false);
+
+  // ============================
+  // CRITICAL: SCROLL RESTORATION (Before anything else)
+  // ============================
+  useEffect(() => {
+    // Disable browser's automatic scroll restoration
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
+    const savedPosition = sessionStorage.getItem(SCROLL_POS_KEY);
+    const hasBeenRestored = sessionStorage.getItem(SCROLL_RESTORED_KEY);
+
+    if (savedPosition && !hasBeenRestored && !scrollRestoredRef.current) {
+      const scrollY = parseInt(savedPosition, 10);
+
+      // Restore immediately without animation
+      window.scrollTo(0, scrollY);
+
+      // Mark as restored to prevent multiple restorations
+      scrollRestoredRef.current = true;
+      sessionStorage.setItem(SCROLL_RESTORED_KEY, 'true');
+
+      console.log('[Scroll Restore] Restored to position:', scrollY);
+    }
+
+    // Cleanup: Clear the restored flag after a delay to allow future saves
+    const cleanupTimer = setTimeout(() => {
+      sessionStorage.removeItem(SCROLL_RESTORED_KEY);
+    }, 1000);
+
+    return () => clearTimeout(cleanupTimer);
+  }, []);
+
+  // ============================
+  // SAVE SCROLL POSITION (Before navigation)
+  // ============================
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem(SCROLL_POS_KEY, window.scrollY.toString());
+    };
+
+    // Also save on visibility change (more reliable for mobile)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        sessionStorage.setItem(SCROLL_POS_KEY, window.scrollY.toString());
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // ============================
   // INITIALIZE: SSR or Cache or Fetch
@@ -57,7 +117,7 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
 
     const initialize = async () => {
       try {
-        // 1. HAS SSR DATA: Save to cache and restore scroll
+        // 1. HAS SSR DATA: Save to cache
         if (hasSSRData) {
           console.log('[Init] Using SSR data, saving to cache');
 
@@ -72,21 +132,11 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
             1000 * 60 * 60,
           );
 
-          // Check for scroll position (back navigation)
-          const savedScroll = sessionStorage.getItem('projects-scroll-position');
-          if (savedScroll) {
-            setTimeout(() => {
-              window.scrollTo(0, parseInt(savedScroll));
-              sessionStorage.removeItem('projects-scroll-position');
-            }, 100);
-          }
-
           return;
         }
 
         // 2. NO SSR DATA: Check client cache
         const cached = await globalCache.get<any>(CACHE_KEY_ALL);
-        const hasScrollPosition = sessionStorage.getItem('projects-scroll-position') !== null;
 
         if (cached && cached.projects.length > 0) {
           console.log(`[Client Cache] Restoring ${cached.projects.length} projects`);
@@ -95,14 +145,6 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
           setCurrentPage(cached.currentPage);
           setTotalPages(cached.totalPages);
           loadedPagesRef.current = new Set(cached.loadedPages || [1]);
-
-          if (hasScrollPosition) {
-            const savedScroll = sessionStorage.getItem('projects-scroll-position');
-            setTimeout(() => {
-              window.scrollTo(0, parseInt(savedScroll!));
-              sessionStorage.removeItem('projects-scroll-position');
-            }, 100);
-          }
         } else {
           // 3. NO CACHE: Fetch from server
           console.log('[Init] No SSR, no cache - fetching from server');
@@ -136,7 +178,7 @@ export function ProjectsGrid({ initialProjects, initialPagination, limit }: Proj
   }, [hasSSRData, initialProjects, initialPagination, limit]);
 
   // ============================
-  // SCROLL TRACKING
+  // SCROLL TRACKING (for scroll-to-top button only)
   // ============================
   useEffect(() => {
     const handleScroll = () => {

@@ -98,27 +98,36 @@ export interface BlogPost {
   slug: string;
   excerpt: string;
   content: string;
+  contentHtml: string;  // Added
   coverImage?: string;
   tags: string[];
   readTime: number;
+  readingTime: number;  // Added (API has both)
   publishedAt: string;
   updatedAt?: string;
+  lastUpdatedAt?: string;  // Added
   author?: Author;
+  category?: string;  // Added
+  categorySlug?: string;  // Added
+  views?: number;  // Added
+  wordCount?: number;  // Added
+  metaTitle?: string;  // Added
+  metaDescription?: string;  // Added
+  canonicalUrl?: string;
+  structuredData?: any;  // Added
+  toc?: Array<{  // Added
+    level: number;
+    text: string;
+    id: string;
+  }>;
   seoTitle?: string;
   seoDescription?: string;
   keywords?: string[];
-  canonicalUrl?: string;
 }
 
 export interface Author {
   name: string;
   avatar?: string;
   bio?: string;
-}
-
-export interface SearchResult {
-  posts: BlogPost[];
-  total: number;
-  page: number;
-  totalPages: number;
+  title?: string;  // Added
 }
