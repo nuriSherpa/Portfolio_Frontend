@@ -92,42 +92,57 @@ export interface SocialLink {
   order?: number;
 }
 
+// lib/types/models.ts
 export interface BlogPost {
   _id: string;
   title: string;
   slug: string;
-  excerpt: string;
-  content: string;
-  contentHtml: string;  // Added
-  coverImage?: string;
-  tags: string[];
-  readTime: number;
-  readingTime: number;  // Added (API has both)
+  excerpt?: string;
+  content?: string;
+  contentHtml?: string;
+
+  // Images - multiple fallbacks
+  featuredImage?: string; // Main uploaded image (required)
+  featuredImageAlt?: string; // Alt text for featured image
+  coverImage?: string; // Legacy/alternative
+  firstImage?: string; // First image from content
+
+  // Author
+  author?: {
+    name: string;
+    title?: string;
+    avatar?: string;
+    isGuest?: boolean;
+  };
+
+  // Meta
   publishedAt: string;
-  updatedAt?: string;
-  lastUpdatedAt?: string;  // Added
-  author?: Author;
-  category?: string;  // Added
-  categorySlug?: string;  // Added
-  views?: number;  // Added
-  wordCount?: number;  // Added
-  metaTitle?: string;  // Added
-  metaDescription?: string;  // Added
+  readingTime?: number; // From API
+  readTime?: number; // Legacy fallback
+  tags: string[];
+  category?: string;
+  categorySlug?: string;
+  views?: number;
+
+  // SEO
+  metaTitle?: string;
+  metaDescription?: string;
   canonicalUrl?: string;
-  structuredData?: any;  // Added
-  toc?: Array<{  // Added
+
+  // Content
+  toc?: Array<{
     level: number;
     text: string;
     id: string;
   }>;
-  seoTitle?: string;
-  seoDescription?: string;
-  keywords?: string[];
+  wordCount?: number;
+
+  lastUpdatedAt?: string;
 }
 
 export interface Author {
   name: string;
   avatar?: string;
   bio?: string;
-  title?: string;  // Added
+  title?: string; // Added
 }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import { BlogPost } from '@/lib/types/models';
 import { ArrowLeft, Share2, Twitter, Linkedin, Facebook } from 'lucide-react';
+import Image from 'next/image';
 
 interface BlogPostSidebarProps {
   post: BlogPost;
@@ -18,81 +19,57 @@ export function BlogPostSidebar({ post }: BlogPostSidebarProps) {
 
   const toc = post.toc || [];
 
-  // Listen for headings ready and also poll as fallback
+  // Author data with fallbacks
+  const authorName = post.author?.name || 'Tendinuri Sherpa';
+  const authorTitle = post.author?.title || 'Full Stack Developer';
+  const authorAvatar = post.author?.avatar || '/default-avatar.jpg';
+
+  // FIX: Listen to both events - headingsReady and headingInView
   useEffect(() => {
     if (toc.length === 0) return;
 
-    let pollInterval: NodeJS.Timeout | null = null;
-
     const handleHeadingsReady = () => {
-      console.log('Sidebar: Event received');
+      console.log('Sidebar: Headings ready');
       setHeadingsReady(true);
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
+    };
+
+    const handleHeadingInView = (e: CustomEvent) => {
+      const { activeId } = e.detail;
+      setActiveId(activeId);
     };
 
     window.addEventListener('headingsReady', handleHeadingsReady);
+    window.addEventListener('headingInView', handleHeadingInView as EventListener);
 
-    // Fallback: poll for headings
-    const checkHeadings = () => {
-      const firstId = toc[0]?.id;
-      if (!firstId) return false;
-
-      const element = document.getElementById(firstId);
-      if (element) {
-        console.log('Sidebar: Found headings via polling');
-        setHeadingsReady(true);
-        return true;
-      }
-      return false;
-    };
-
-    // Try immediately
-    if (!checkHeadings()) {
-      // Start polling every 100ms for up to 3 seconds
-      let attempts = 0;
-      pollInterval = setInterval(() => {
-        attempts++;
-        if (checkHeadings() || attempts > 30) {
-          if (pollInterval) clearInterval(pollInterval);
+    // Fallback: Check if headings exist after a short delay
+    const checkTimer = setTimeout(() => {
+      if (toc[0]?.id) {
+        const element = document.getElementById(toc[0].id);
+        if (element) {
+          setHeadingsReady(true);
+          setActiveId(toc[0].id);
         }
-      }, 100);
-    }
+      }
+    }, 500);
 
     return () => {
       window.removeEventListener('headingsReady', handleHeadingsReady);
-      if (pollInterval) clearInterval(pollInterval);
+      window.removeEventListener('headingInView', handleHeadingInView as EventListener);
+      clearTimeout(checkTimer);
     };
   }, [toc]);
 
-  // Scroll spy
-  useEffect(() => {
-    if (!headingsReady || toc.length === 0) return;
-
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY + 200;
-      let current: string | null = null;
-
-      for (const item of toc) {
-        const element = document.getElementById(item.id);
-        if (element) {
-          const top = element.getBoundingClientRect().top + window.scrollY;
-          if (scrollPosition >= top) {
-            current = item.id;
-          }
-        }
-      }
-
-      setActiveId(current);
-    };
-
-    handleScroll(); // Initial check
-    window.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [headingsReady, toc]);
+  // Smooth scroll to heading
+  const handleTocClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+    e.preventDefault();
+    const element = document.getElementById(id);
+    if (element) {
+      const offsetTop = element.getBoundingClientRect().top + window.scrollY - 100;
+      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      window.history.pushState(null, '', `#${id}`);
+      setActiveId(id);
+    }
+  }, []);
 
   const handleShare = (platform: string) => {
     const text = encodeURIComponent(shareText);
@@ -106,17 +83,6 @@ export function BlogPostSidebar({ post }: BlogPostSidebarProps) {
 
     window.open(urls[platform as keyof typeof urls], '_blank', 'width=600,height=400');
   };
-
-  const handleTocClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
-    e.preventDefault();
-    const element = document.getElementById(id);
-    if (element) {
-      const offsetTop = element.getBoundingClientRect().top + window.scrollY - 100;
-      window.scrollTo({ top: offsetTop, behavior: 'smooth' });
-      window.history.pushState(null, '', `#${id}`);
-      setActiveId(id);
-    }
-  }, []);
 
   return (
     <div className="sticky top-8 space-y-8">
@@ -150,7 +116,7 @@ export function BlogPostSidebar({ post }: BlogPostSidebarProps) {
         </div>
       )}
 
-      {/* Share, Tags, Author sections... */}
+      {/* Share Section */}
       <div className="bg-grey-100 rounded-xl p-6">
         <h3 className="font-bold text-grey-900 mb-4 flex items-center gap-2">
           <Share2 className="w-4 h-4" />
@@ -159,25 +125,26 @@ export function BlogPostSidebar({ post }: BlogPostSidebarProps) {
         <div className="flex gap-3">
           <button
             onClick={() => handleShare('twitter')}
-            className="p-3 bg-white rounded-lg hover:bg-grey-200"
+            className="p-3 bg-white rounded-lg hover:bg-grey-200 transition-colors"
           >
             <Twitter className="w-5 h-5" />
           </button>
           <button
             onClick={() => handleShare('linkedin')}
-            className="p-3 bg-white rounded-lg hover:bg-grey-200"
+            className="p-3 bg-white rounded-lg hover:bg-grey-200 transition-colors"
           >
             <Linkedin className="w-5 h-5" />
           </button>
           <button
             onClick={() => handleShare('facebook')}
-            className="p-3 bg-white rounded-lg hover:bg-grey-200"
+            className="p-3 bg-white rounded-lg hover:bg-grey-200 transition-colors"
           >
             <Facebook className="w-5 h-5" />
           </button>
         </div>
       </div>
 
+      {/* Tags Section */}
       <div className="bg-grey-100 rounded-xl p-6">
         <h3 className="font-bold text-grey-900 mb-4">Tags</h3>
         <div className="flex flex-wrap gap-2">
@@ -185,7 +152,7 @@ export function BlogPostSidebar({ post }: BlogPostSidebarProps) {
             <Link
               key={tag}
               href={`/blog?tag=${encodeURIComponent(tag)}`}
-              className="px-3 py-1 bg-white text-grey-600 text-sm rounded-full hover:bg-red hover:text-white"
+              className="px-3 py-1 bg-white text-grey-600 text-sm rounded-full hover:bg-red hover:text-white transition-colors"
             >
               #{tag}
             </Link>
@@ -193,22 +160,33 @@ export function BlogPostSidebar({ post }: BlogPostSidebarProps) {
         </div>
       </div>
 
-      {post.author && (
-        <div className="bg-grey-100 rounded-xl p-6">
-          <h3 className="font-bold text-grey-900 mb-4">About Author</h3>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red/10 rounded-full flex items-center justify-center">
+      {/* Author Section */}
+      <div className="bg-grey-100 rounded-xl p-6">
+        <h3 className="font-bold text-grey-900 mb-4">About Author</h3>
+        <div className="flex items-center gap-3">
+          {authorAvatar ? (
+            <div className="relative w-12 h-12 rounded-full overflow-hidden bg-grey-200 shrink-0">
+              <Image
+                src={authorAvatar}
+                alt={authorName}
+                fill
+                className="object-cover"
+                sizes="48px"
+              />
+            </div>
+          ) : (
+            <div className="w-12 h-12 bg-red/10 rounded-full flex items-center justify-center shrink-0">
               <span className="text-red font-bold text-lg">
-                {post.author.name.charAt(0).toUpperCase()}
+                {authorName.charAt(0).toUpperCase()}
               </span>
             </div>
-            <div>
-              <p className="font-medium text-grey-900">{post.author.name}</p>
-              {post.author.title && <p className="text-sm text-grey-600">{post.author.title}</p>}
-            </div>
+          )}
+          <div>
+            <p className="font-medium text-grey-900">{authorName}</p>
+            {authorTitle && <p className="text-sm text-grey-600">{authorTitle}</p>}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

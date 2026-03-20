@@ -5,6 +5,7 @@ import { BlogPost } from '@/lib/types/models';
 import { Check, Copy } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
+import Image from 'next/image';
 
 import { AdContainer, useAdInsertion } from './AdContainer';
 import {
@@ -93,59 +94,100 @@ export function BlogPostContent({
   adFrequency = 4,
 }: BlogPostContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const idsAssignedRef = useRef(false);
+  const headingRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const observerRef = useRef<IntersectionObserver | null>(null);
   const { shouldShowAd, getNextAdIndex } = useAdInsertion({ enableAds, adFrequency });
 
-  // Heading ID injection for TOC
+  // Use featuredImage with fallback to firstImage or coverImage
+  const imageUrl = post.featuredImage || post.firstImage || post.coverImage;
+  const imageAlt = post.featuredImageAlt || post.title;
+
+  // FIX 1: Working scroll spy with IntersectionObserver
   useEffect(() => {
-    let retryTimer: NodeJS.Timeout | undefined;
+    if (!post.toc || post.toc.length === 0 || !contentRef.current) return;
 
-    const addIds = () => {
-      if (!contentRef.current || idsAssignedRef.current) return;
-      if (!post.toc || post.toc.length === 0) return;
+    // Disconnect previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
 
-      const headings = contentRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6');
-      if (headings.length === 0) {
-        retryTimer = setTimeout(addIds, 50);
-        return;
+    // Collect heading elements
+    const headings = contentRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    headingRefs.current.clear();
+
+    // Map TOC items to heading elements and assign IDs
+    const tocMap = new Map(post.toc.map((item) => [item.text.toLowerCase().trim(), item.id]));
+
+    headings.forEach((heading) => {
+      const text = heading.textContent?.trim() || '';
+      const textLower = text.toLowerCase();
+
+      // Find matching TOC ID
+      let id = tocMap.get(textLower) || tocMap.get(textLower.replace(/[^a-z0-9\s]/g, '').trim());
+
+      if (!id) {
+        // Generate ID if not in TOC
+        id = textLower
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
       }
 
-      const tocMap = new Map(post.toc.map((item) => [item.text.toLowerCase().trim(), item.id]));
-      let matched = 0;
+      if (id) {
+        heading.id = id;
+        headingRefs.current.set(id, heading as HTMLElement);
+      }
+    });
 
-      headings.forEach((heading) => {
-        const text = heading.textContent?.trim() || '';
-        const textLower = text.toLowerCase();
+    // Create IntersectionObserver for scroll spy
+    // FIX: Use rootMargin to create a "middle zone" for activation [^1^][^5^]
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        // Find the last intersecting entry (bottom-most visible heading)
+        const visibleEntries = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => {
+            const rectA = a.boundingClientRect;
+            const rectB = b.boundingClientRect;
+            return rectA.top - rectB.top;
+          });
 
-        let id = tocMap.get(textLower) || tocMap.get(textLower.replace(/[^a-z0-9\s]/g, '').trim());
+        if (visibleEntries.length > 0) {
+          // Get the last (most bottom) visible heading
+          const activeEntry = visibleEntries[visibleEntries.length - 1];
+          const activeId = activeEntry.target.id;
 
-        if (!id) {
-          id = textLower
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '');
-        } else {
-          matched++;
+          // Dispatch custom event for sidebar
+          window.dispatchEvent(
+            new CustomEvent('headingInView', {
+              detail: { activeId },
+            }),
+          );
         }
+      },
+      {
+        root: null, // viewport
+        rootMargin: '-20% 0px -60% 0px', // Activate when heading is in top 20-40% of viewport
+        threshold: 0,
+      },
+    );
 
-        if (id) heading.id = id;
-      });
+    // Observe all headings
+    headingRefs.current.forEach((heading) => {
+      observerRef.current?.observe(heading);
+    });
 
-      idsAssignedRef.current = true;
-      window.dispatchEvent(
-        new CustomEvent('headingsReady', {
-          detail: { count: matched, total: headings.length },
-        }),
-      );
-    };
-
-    addIds();
-    const safetyTimer = setTimeout(addIds, 100);
+    // Initial dispatch
+    if (headingRefs.current.size > 0) {
+      const firstId = post.toc[0]?.id;
+      if (firstId) {
+        window.dispatchEvent(new CustomEvent('headingsReady', { detail: {} }));
+      }
+    }
 
     return () => {
-      if (retryTimer) clearTimeout(retryTimer);
-      clearTimeout(safetyTimer);
+      observerRef.current?.disconnect();
     };
   }, [post.toc, post.contentHtml]);
 
@@ -159,13 +201,11 @@ export function BlogPostContent({
 
     parts.forEach((part, index) => {
       if (part.type === 'code') {
-        // Render code block
         elements.push(
           <CodeBlock key={`code-${index}`} code={part.content} language={part.language} />,
         );
         blockCount++;
 
-        // Check for ad insertion after code
         if (shouldShowAd(blockCount)) {
           elements.push(
             <AdContainer
@@ -176,7 +216,6 @@ export function BlogPostContent({
           );
         }
       } else {
-        // Render HTML content, possibly split by headings
         const remaining = adFrequency - (blockCount % adFrequency);
         const sections = hasCodeBlocks ? splitByHeadings(part.content, remaining) : [part.content];
 
@@ -190,7 +229,6 @@ export function BlogPostContent({
             );
             blockCount++;
 
-            // Check for ad insertion between sections
             if (shouldShowAd(blockCount) && secIndex < sections.length - 1) {
               elements.push(
                 <AdContainer
@@ -210,9 +248,22 @@ export function BlogPostContent({
 
   return (
     <article ref={contentRef} className="relative">
-      {post.coverImage && (
-        <div className="relative w-full aspect-[16/9] mb-8 rounded-xl overflow-hidden">
-          <img src={post.coverImage} alt={post.title} className="w-full h-full object-cover" />
+      {/* FIX 2: No orange background - use empty placeholder or no placeholder */}
+      {imageUrl && (
+        <div className="relative w-full aspect-[16/9] mb-8 rounded-xl overflow-hidden bg-grey-100">
+          <Image
+            src={imageUrl}
+            alt={imageAlt}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 80vw"
+            priority
+            // FIX: Remove placeholder="blur" or use placeholder="empty" to avoid orange blur [^3^][^4^]
+            placeholder="empty"
+            // Alternative: If you want blur, provide a proper blurDataURL:
+            // placeholder="blur"
+            // blurDataURL="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3Crect width='1' height='1' fill='%23f3f4f6'/%3E%3C/svg%3E"
+          />
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getPostBySlug } from '@/lib/api/actions/posts';
+import { getPostBySlug } from '@/lib/api/actions/blog';
 import { BlogPostContent } from '@/components/blog/blog-post-content';
 import { BlogPostSidebar } from '@/components/blog/blog-post-sidebar';
 import { BlogPostHeader } from '@/components/blog/blog-post-header';
@@ -11,7 +11,6 @@ interface BlogPostPageProps {
 }
 
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
-  // Handle both async and sync params (Next.js 15+)
   const resolvedParams = await Promise.resolve(params);
   const slug = resolvedParams.slug;
 
@@ -42,9 +41,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   };
 }
 
-// Main page component - MUST be default export
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  // Handle both async and sync params
   const resolvedParams = await Promise.resolve(params);
   const slug = resolvedParams.slug;
 
@@ -58,13 +55,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     <main className="min-h-screen bg-white py-12">
       <div className="w-[80%] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          {/* Main Content */}
           <div className="lg:col-span-8">
             <BlogPostHeader post={post} />
             <BlogPostContent post={post} />
           </div>
-
-          {/* Sidebar */}
           <aside className="lg:col-span-4">
             <BlogPostSidebar post={post} />
           </aside>

@@ -8,8 +8,8 @@ export const ENDPOINTS = {
   about: '/about',
   blogs: '/blog',
   blogBySlug: (slug: string) => `/blog/${slug}`,
-  blogSearch: '/blog/search',
-  autocomplete: '/blog/search/autocomplete',
+  blogSearch: '/blog/search', // Full search results
+  autocomplete: '/blog/search/autocomplete', // Suggestions only
   visitorInit: '/visitor/init',
 
   // Admin routes
