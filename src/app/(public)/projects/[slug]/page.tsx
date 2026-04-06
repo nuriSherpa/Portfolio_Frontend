@@ -1,14 +1,8 @@
 // src/app/(public)/projects/[slug]/page.tsx
-import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
-
-import { ArrowLeft, Calendar, Github, ExternalLink, Eye, CalendarCheck } from 'lucide-react';
 import { getProjectBySlug } from '@/lib/api/actions/projects';
-
 import { ProjectDetailClient } from '@/components/projects/project-detail-client';
 
-// Props type for Next.js 15
 type Props = {
   params: Promise<{ slug: string }>;
 };
@@ -26,31 +20,19 @@ function formatDate(dateString: string | undefined | Date) {
 }
 
 export default async function ProjectPage({ params }: Props) {
-  // Server-side: await params (Next.js 15)
   const { slug } = await params;
+  if (!slug) notFound();
 
-  if (!slug) {
-    notFound();
-  }
-
-  // Server fetch (uses server cache - cachedFetch)
   const project = await getProjectBySlug(slug);
-
-  if (!project) {
-    notFound();
-  }
-
-  const postedDate = formatDate(project.publishedAt);
-  const completedDate = formatDate(project.projectCompletionDate);
+  if (!project) notFound();
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Client component handles local cache hydration */}
       <ProjectDetailClient
         project={project}
         slug={slug}
-        postedDate={postedDate}
-        completedDate={completedDate}
+        postedDate={formatDate(project.publishedAt)}
+        completedDate={formatDate(project.projectCompletionDate)}
       />
     </div>
   );

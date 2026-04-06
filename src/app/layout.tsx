@@ -100,12 +100,14 @@ export const metadata: Metadata = {
   manifest: '/site.webmanifest',
 };
 
+import { VisitorProvider } from '@/components/providers/visitor-provider';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable} data-scroll-behavior="smooth">
       {/* Apply the font className to body so it's used immediately */}
       <body className={`min-h-screen bg-white text-black antialiased ${inter.className}`}>
-        {children}
+        <VisitorProvider>{children}</VisitorProvider>
       </body>
     </html>
   );

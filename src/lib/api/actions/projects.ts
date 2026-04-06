@@ -1,4 +1,5 @@
 // src/lib/api/actions/projects.ts
+'use server'; // ← ADD THIS
 import { cachedFetch, invalidateCache } from '../cached-fetch';
 import { Project } from '@/lib/types/models';
 import { ENDPOINTS } from '../endpoints';
@@ -38,12 +39,18 @@ const PROJECT_DETAIL_CACHE_TTL = 3600; // 1 hour - rarely changes
 
 export async function getProjects(limit = 6, page = 1) {
   try {
+    const url = `${ENDPOINTS.projects}?limit=${limit}&page=${page}`;
+    console.log('[getProjects] Fetching URL:', url);
+    console.log('[getProjects] Environment:', {
+      isBrowser: typeof window !== 'undefined',
+      hasApiUrl: !!process.env.API_URL,
+    });
+
     const result = await cachedFetch<ProjectsApiResponse['data']>({
-      url: `${ENDPOINTS.projects}?limit=${limit}&page=${page}`,
+      url: url,
       key: `projects:list:page:${page}:limit:${limit}`,
-      strategy: 'memory', // Use memory strategy
+      strategy: 'memory',
       ttl: PROJECTS_CACHE_TTL,
-      // Remove tags parameter as it's not used anymore
       parser: (res: ProjectsApiResponse) => {
         if (!res?.success) {
           throw new Error(res?.message || 'API returned unsuccessful response');
@@ -70,6 +77,7 @@ export async function getProjects(limit = 6, page = 1) {
     };
   } catch (error: any) {
     console.error('[getProjects] Error:', error.message);
+    console.error('[getProjects] Full error:', error);
     return {
       projects: [] as Project[],
       pagination: {
@@ -156,7 +164,9 @@ export async function getProjectsFresh(limit = 6, page = 1) {
 }
 
 // Improved invalidation functions
-export function invalidateProjectsCache(page?: number) {
+// src/lib/api/actions/projects.ts
+
+export async function invalidateProjectsCache(page?: number) {
   if (page) {
     invalidateCache(`projects:list:page:${page}`);
   } else {
@@ -164,6 +174,6 @@ export function invalidateProjectsCache(page?: number) {
   }
 }
 
-export function invalidateProjectCache(slug: string) {
+export async function invalidateProjectCache(slug: string) {
   invalidateCache(`projects:slug:${slug}`);
 }

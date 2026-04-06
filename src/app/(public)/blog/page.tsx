@@ -1,7 +1,7 @@
 // src/app/(public)/blog/page.tsx
 import { Metadata } from 'next';
 import { Suspense } from 'react';
-import { getPosts } from '@/lib/api/actions/blog';
+import { getPosts, searchPosts } from '@/lib/api/actions/blog';
 import { BlogGrid } from '@/components/blog/blog-grid';
 import { BlogSearch } from '@/components/blog/blog-search';
 import { BlogFilters } from '@/components/blog/blog-filters';
@@ -14,30 +14,25 @@ export const metadata: Metadata = {
 
 export const revalidate = 3600;
 
-// Updated interface - searchParams is now a Promise
-interface BlogPageProps {
-  searchParams: Promise<{
-    q?: string;
-    tag?: string;
-    category?: string;
-    sort?: string;
-    page?: string;
-    author?: string;
-    fromDate?: string;
-    toDate?: string;
-    minReadingTime?: string;
-    maxReadingTime?: string;
-    dateRange?: string;
-  }>;
+interface SearchParams {
+  q?: string;
+  tags?: string;
+  category?: string;
+  sort?: string;
+  page?: string;
+  author?: string;
+  fromDate?: string;
+  toDate?: string;
+  minReadingTime?: string;
+  maxReadingTime?: string;
+  dateRange?: string;
 }
 
-async function BlogContent({ searchParams }: BlogPageProps) {
-  // Await the searchParams Promise
+async function BlogContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
 
-  // Parse URL params
   const query = params.q || '';
-  const tag = params.tag || '';
+  const tags = params.tags || '';
   const category = params.category || '';
   const sort = params.sort || 'newest';
   const page = parseInt(params.page || '1', 10);
@@ -47,17 +42,24 @@ async function BlogContent({ searchParams }: BlogPageProps) {
   const minReadingTime = params.minReadingTime || '';
   const maxReadingTime = params.maxReadingTime || '';
 
-  // Use searchPosts if any filter is applied, otherwise use getPosts
-  const hasAdvancedFilters =
-    query || category || author || fromDate || toDate || minReadingTime || maxReadingTime;
+  const hasFilters = !!(
+    query ||
+    category ||
+    author ||
+    fromDate ||
+    toDate ||
+    minReadingTime ||
+    maxReadingTime ||
+    tags
+  );
 
   let posts, meta, filters;
 
-  if (hasAdvancedFilters) {
-    // Import searchPosts dynamically or use it directly
-    const { searchPosts } = await import('@/lib/api/actions/blog');
+  if (hasFilters) {
+    const activeTag = tags ? tags.split(',')[0] : '';
     const result = await searchPosts(query, {
-      tag: tag || undefined,
+      tags: tags || undefined,
+      tag: activeTag || undefined,
       category: category || undefined,
       author: author || undefined,
       sort,
@@ -70,9 +72,13 @@ async function BlogContent({ searchParams }: BlogPageProps) {
     });
     posts = result.posts;
     meta = result.meta;
-    filters = result.filters;
+    // Search endpoint doesn't return filters — use a fresh getPosts call for filters
+    // so category/tag pills always show, even on filtered pages
+    const filtersResult = await getPosts(1, 1);
+    filters = filtersResult.filters;
   } else {
-    const result = await getPosts(6, page, tag || undefined, sort, category || undefined);
+    // Clean load — getPosts returns both posts AND filters in one call
+    const result = await getPosts(6, page, undefined, sort, undefined);
     posts = result.posts;
     meta = result.meta;
     filters = result.filters;
@@ -87,8 +93,11 @@ async function BlogContent({ searchParams }: BlogPageProps) {
         </p>
       </div>
 
-      <div className="mb-6 flex flex-col gap-4">
+      <div className="mb-4">
         <BlogSearch />
+      </div>
+
+      <div className="mb-6">
         <BlogFilters initialFilters={filters} />
       </div>
 
@@ -97,36 +106,13 @@ async function BlogContent({ searchParams }: BlogPageProps) {
   );
 }
 
-function BlogGridWrapper({ searchParams }: BlogPageProps) {
-  return (
-    <Suspense fallback={<BlogPageSkeleton />}>
-      <BlogContent searchParams={searchParams} />
-    </Suspense>
-  );
-}
-
-// Updated page component - must await searchParams
-export default async function BlogPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    q?: string;
-    tag?: string;
-    category?: string;
-    sort?: string;
-    page?: string;
-    author?: string;
-    fromDate?: string;
-    toDate?: string;
-    minReadingTime?: string;
-    maxReadingTime?: string;
-    dateRange?: string;
-  }>;
-}) {
+export default async function BlogPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   return (
     <main className="min-h-screen bg-white py-12">
       <div className="w-[80%] mx-auto">
-        <BlogGridWrapper searchParams={searchParams} />
+        <Suspense fallback={<BlogPageSkeleton />}>
+          <BlogContent searchParams={searchParams} />
+        </Suspense>
       </div>
     </main>
   );

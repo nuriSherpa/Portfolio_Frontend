@@ -2,7 +2,7 @@
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import { getProjects } from '@/lib/api/actions/projects';
-import { ProjectsGrid } from '@/components/projects/project-grid';
+import { ProjectsGrid } from '@/components/projects/projects-grid';
 import { ProjectsPageSkeleton } from '@/components/projects/projects-page-skeleton';
 
 export const metadata: Metadata = {

@@ -193,3 +193,148 @@
     @apply border border-grey-200 px-4 py-2;
   }
 }
+
+@keyframes digit-settle {
+  0% {
+    transform: translateY(var(--digit-y)) scaleY(1);
+  }
+  40% {
+    transform: translateY(calc(var(--digit-y) - 3%)) scaleY(0.97);
+  }
+  70% {
+    transform: translateY(calc(var(--digit-y) + 1.5%)) scaleY(1.01);
+  }
+  100% {
+    transform: translateY(var(--digit-y)) scaleY(1);
+  }
+}
+
+/* Rich Text Editor Styles */
+@layer components {
+  .rich-text-editor {
+    /* Headings */
+    & h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    & h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      margin-top: 1rem;
+    }
+    & h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      margin-top: 1rem;
+    }
+    & h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      margin-top: 0.75rem;
+    }
+
+    /* Paragraphs and lists */
+    & p {
+      margin-bottom: 0.75rem;
+    }
+    & ul {
+      list-style-type: disc;
+      padding-left: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+    & ol {
+      list-style-type: decimal;
+      padding-left: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+    & li {
+      margin-bottom: 0.25rem;
+    }
+
+    /* Blockquote */
+    & blockquote {
+      border-left: 4px solid var(--color-red);
+      padding-left: 1rem;
+      font-style: italic;
+      color: rgba(0, 0, 0, 0.6);
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Code */
+    & pre {
+      background-color: var(--color-black);
+      color: white;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      overflow-x: auto;
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
+    & code {
+      background-color: rgba(0, 0, 0, 0.05);
+      padding: 0.25rem 0.375rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-family: monospace;
+    }
+    & pre code {
+      background-color: transparent;
+      color: white;
+      padding: 0;
+    }
+
+    /* Links */
+    & a {
+      color: var(--color-red);
+      text-decoration: underline;
+    }
+
+    /* Images */
+    & img {
+      border-radius: 0.5rem;
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+      cursor: move;
+      transition: all 0.2s ease;
+      max-width: 100%;
+    }
+    & img:hover {
+      outline: 2px solid rgba(var(--color-red-rgb), 0.5);
+      transform: scale(1.02);
+    }
+
+    /* Float styles for text wrapping - use data attributes instead of style selectors */
+    & img[data-align='left'] {
+      float: left;
+      margin-right: 1.5rem;
+      margin-bottom: 1rem;
+      display: inline-block;
+    }
+    & img[data-align='right'] {
+      float: right;
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+      display: inline-block;
+    }
+    & img[data-align='center'] {
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      margin-bottom: 1rem;
+    }
+
+    /* Text formatting */
+    & strong {
+      font-weight: 700;
+    }
+    & em {
+      font-style: italic;
+    }
+  }
+}

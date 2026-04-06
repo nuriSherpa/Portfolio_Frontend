@@ -1,27 +1,25 @@
 // src/lib/api/actions/blog.ts
 'use server';
 
-import { ENDPOINTS } from '@/lib/api/endpoints';
+import { cachedFetch } from '../cached-fetch';
+import { BlogPost } from '@/lib/types/models';
 
-export interface AutocompleteSuggestion {
-  type: 'post';
-  id: string;
-  title: string;
-  slug: string;
-  category?: string;
-  tags: string[];
-  views: number;
-  excerpt?: string;
-  rank: number;
-}
+const API_BASE = process.env.API_URL || 'http://localhost:9090/api/v1';
 
-export interface PostFilters {
+const ENDPOINTS = {
+  blog: '/blog',
+  blogSearch: '/blog/search',
+  blogPost: (slug: string) => `/blog/${slug}`,
+  blogAutocomplete: '/blog/search/autocomplete',
+};
+
+export interface BlogFilters {
   categories: Array<{ name: string; slug: string; count: number }>;
   tags: Array<{ name: string; count: number }>;
   sortOptions: string[];
 }
 
-export interface BaseMeta {
+export interface BlogMeta {
   total: number;
   page: number;
   totalPages: number;
@@ -30,150 +28,103 @@ export interface BaseMeta {
   hasPrev: boolean;
 }
 
-export interface SearchMeta extends BaseMeta {
-  query: string | null;
-  activeTag: string | null;
-  activeCategory: string | null;
-  availableFilters: {
-    categories: Array<{ name: string; slug: string; count: number }>;
-    tags: Array<{ name: string; count: number }>;
+// Keep /uploads/... paths as-is — Next.js rewrites proxy them to the backend.
+// Strip any absolute localhost prefix so <Image> uses the same-origin proxy.
+function fixImageUrl(url: string | undefined): string {
+  if (!url) return '';
+  // Already a relative /uploads/ path — use as-is
+  if (url.startsWith('/uploads/')) return url;
+  // Strip absolute localhost URL down to relative path
+  const match = url.match(/\/uploads\/.+/);
+  if (match) return match[0];
+  // External URL — return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return url;
+}
+
+function fixPost(post: any): BlogPost {
+  if (!post) return post;
+  return {
+    ...post,
+    featuredImage: fixImageUrl(post.featuredImage),
+    coverImage: fixImageUrl(post.coverImage),
+    firstImage: fixImageUrl(post.firstImage),
+    author: post.author ? { ...post.author, avatar: fixImageUrl(post.author.avatar) } : post.author,
   };
 }
 
-export interface PostsResponse {
-  posts: any[];
-  meta: BaseMeta;
-  filters: PostFilters;
-}
-
-export interface SearchResults {
-  posts: any[];
-  meta: SearchMeta;
-  filters: PostFilters;
-}
-
-const BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:9090';
-
-// =============== GET ALL POSTS (Simple listing) ===============
+// ── GET /api/v1/blog ──
+// Response: { success, data: { posts, meta, filters } }
 export async function getPosts(
-  limit: number = 6,
-  page: number = 1,
+  limit = 6,
+  page = 1,
   tag?: string,
-  sort: string = 'newest',
+  sort = 'newest',
   category?: string,
-): Promise<PostsResponse> {
+) {
   try {
     const params = new URLSearchParams();
-    params.set('limit', limit.toString());
-    params.set('page', page.toString());
-    params.set('sort', sort);
+    params.set('limit', String(limit));
+    params.set('page', String(page));
     if (tag) params.set('tag', tag);
+    if (sort) params.set('sort', sort);
     if (category) params.set('category', category);
 
-    const url = `${BASE_URL}/api/v1${ENDPOINTS.blogs}?${params.toString()}`;
-
-    console.log('[getPosts] Fetching:', url);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
+    const data = await cachedFetch<any>({
+      url: `${ENDPOINTS.blog}?${params.toString()}`,
+      key: `blog:list:${params.toString()}`,
+      strategy: 'memory',
+      ttl: 300,
+      parser: (res: any) => {
+        if (!res?.success) throw new Error(res?.message || 'API error');
+        return res.data; // { posts, meta, filters }
+      },
     });
 
-    if (!response.ok) {
-      console.error('[getPosts] HTTP Error:', response.status);
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    const responseData = data.data || data;
-
-    const posts = responseData.posts || responseData.results || [];
-
     return {
-      posts,
-      meta: responseData.meta || {
-        total: responseData.totalResults || posts.length || 0,
-        page: responseData.page || page,
-        totalPages: responseData.totalPages || 1,
-        showing: posts.length,
-        hasNext: responseData.hasNext || false,
-        hasPrev: responseData.hasPrev || false,
-      },
-      filters: responseData.filters ||
-        responseData.availableFilters || {
-          categories: [],
-          tags: [],
-          sortOptions: ['newest', 'popular'],
-        },
+      posts: (data.posts || []).map(fixPost) as BlogPost[],
+      meta: {
+        total: data.meta?.total || 0,
+        page: data.meta?.page || page,
+        totalPages: data.meta?.totalPages || 1,
+        showing: data.meta?.showing || 0,
+        hasNext: data.meta?.hasNext || false,
+        hasPrev: data.meta?.hasPrev || false,
+      } as BlogMeta,
+      filters: {
+        categories: data.filters?.categories || [],
+        tags: data.filters?.tags || [],
+        sortOptions: data.filters?.sortOptions || ['newest', 'oldest', 'popular', 'a-z', 'z-a'],
+      } as BlogFilters,
     };
-  } catch (error) {
-    console.error('[getPosts] Error:', error);
+  } catch (e: any) {
+    console.error('[getPosts] Error:', e.message);
     return {
-      posts: [],
+      posts: [] as BlogPost[],
       meta: {
         total: 0,
         page,
-        totalPages: 0,
+        totalPages: 1,
         showing: 0,
         hasNext: false,
         hasPrev: false,
-      },
-      filters: { categories: [], tags: [], sortOptions: ['newest', 'popular'] },
+      } as BlogMeta,
+      filters: {
+        categories: [],
+        tags: [],
+        sortOptions: ['newest', 'oldest', 'popular'],
+      } as BlogFilters,
     };
   }
 }
 
-// =============== AUTOCOMPLETE ===============
-export async function getAutocompleteSuggestions(
-  query: string,
-  limit = 5,
-): Promise<{
-  success: boolean;
-  suggestions: AutocompleteSuggestion[];
-  total: number;
-}> {
-  try {
-    if (!query || query.trim().length < 2) {
-      return { success: true, suggestions: [], total: 0 };
-    }
-
-    const url = `${BASE_URL}/api/v1${ENDPOINTS.autocomplete}?q=${encodeURIComponent(query.trim())}&limit=${limit}`;
-
-    console.log('[getAutocompleteSuggestions] Fetching:', url);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-
-    // Filter out invalid suggestions
-    const validSuggestions = (data.data || data.suggestions || []).filter(
-      (s: any) => s && typeof s === 'object' && typeof s.title === 'string' && s.title.length > 0,
-    );
-
-    return {
-      success: data.success ?? true,
-      suggestions: validSuggestions,
-      total: data.total || validSuggestions.length,
-    };
-  } catch (error) {
-    console.error('[getAutocompleteSuggestions] Error:', error);
-    return { success: false, suggestions: [], total: 0 };
-  }
-}
-
-// =============== FULL SEARCH (All filters) ===============
+// ── GET /api/v1/blog/search ──
+// Response: { success, data: { results, meta } }
 export async function searchPosts(
-  query: string,
+  query = '',
   options: {
     tag?: string;
-    tags?: string[];
+    tags?: string;
     category?: string;
     author?: string;
     sort?: string;
@@ -184,126 +135,99 @@ export async function searchPosts(
     minReadingTime?: number;
     maxReadingTime?: number;
   } = {},
-): Promise<SearchResults> {
+) {
   try {
     const params = new URLSearchParams();
-
-    // Only add q if it exists and is meaningful
-    if (query && query.trim().length >= 2) {
-      params.set('q', query.trim());
-    }
-
-    params.set('limit', (options.limit || 6).toString());
-    if (options.page) params.set('page', options.page.toString());
+    params.set('limit', String(options.limit || 6));
+    params.set('page', String(options.page || 1));
+    if (query) params.set('q', query);
     if (options.tag) params.set('tag', options.tag);
-    if (options.tags?.length) params.set('tags', options.tags.join(','));
+    if (options.tags) params.set('tags', options.tags);
     if (options.category) params.set('category', options.category);
     if (options.author) params.set('author', options.author);
     if (options.sort) params.set('sort', options.sort);
     if (options.fromDate) params.set('fromDate', options.fromDate);
     if (options.toDate) params.set('toDate', options.toDate);
-    if (options.minReadingTime !== undefined)
-      params.set('minReadingTime', options.minReadingTime.toString());
-    if (options.maxReadingTime !== undefined)
-      params.set('maxReadingTime', options.maxReadingTime.toString());
+    if (options.minReadingTime) params.set('minReadingTime', String(options.minReadingTime));
+    if (options.maxReadingTime) params.set('maxReadingTime', String(options.maxReadingTime));
 
-    const url = `${BASE_URL}/api/v1${ENDPOINTS.blogSearch}?${params.toString()}`;
-
-    console.log('[searchPosts] Fetching:', url);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
+    const data = await cachedFetch<any>({
+      url: `${ENDPOINTS.blogSearch}?${params.toString()}`,
+      key: `blog:search:${params.toString()}`,
+      strategy: 'memory',
+      ttl: 60,
+      parser: (res: any) => {
+        if (!res?.success) throw new Error(res?.message || 'API error');
+        return res.data; // { results, meta }
+      },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    const responseData = data.data || data;
-
-    const posts = responseData.results || responseData.posts || [];
-    const meta = responseData.meta || {};
-
-    console.log('[searchPosts] Parsed:', {
-      postsCount: posts.length,
-      totalResults: meta.totalResults,
-      totalPages: meta.totalPages,
-      query: meta.searchTerm,
-    });
+    const posts = (data.results || []).map(fixPost) as BlogPost[];
+    const meta = data.meta || {};
 
     return {
       posts,
       meta: {
-        total: meta.totalResults || posts.length || 0,
+        total: meta.totalResults || posts.length,
         page: meta.page || options.page || 1,
         totalPages: meta.totalPages || 1,
         showing: posts.length,
         hasNext: meta.hasNext || false,
         hasPrev: meta.hasPrev || false,
-        query: meta.searchTerm || query || null,
-        activeTag: options.tag || null,
-        activeCategory: options.category || null,
-        availableFilters: meta.availableFilters || {
-          categories: [],
-          tags: [],
-        },
-      },
-      filters: {
-        categories: meta.availableFilters?.categories || [],
-        tags: meta.availableFilters?.tags || [],
-        sortOptions: ['relevance', 'newest', 'popular', 'oldest'],
-      },
+      } as BlogMeta,
+      filters: null,
     };
-  } catch (error) {
-    console.error('[searchPosts] Error:', error);
+  } catch (e: any) {
+    console.error('[searchPosts] Error:', e.message);
     return {
-      posts: [],
+      posts: [] as BlogPost[],
       meta: {
         total: 0,
         page: options.page || 1,
-        totalPages: 0,
+        totalPages: 1,
         showing: 0,
         hasNext: false,
         hasPrev: false,
-        query: query || null,
-        activeTag: options.tag || null,
-        activeCategory: options.category || null,
-        availableFilters: { categories: [], tags: [] },
-      },
-      filters: {
-        categories: [],
-        tags: [],
-        sortOptions: ['relevance', 'newest', 'popular', 'oldest'],
-      },
+      } as BlogMeta,
+      filters: null,
     };
   }
 }
 
-// =============== GET POST BY SLUG ===============
-export async function getPostBySlug(slug: string): Promise<any | null> {
+// ── GET /api/v1/blog/search/autocomplete ──
+// Response: { success, data: [...], meta: { totalResults } }
+export async function getAutocompleteSuggestions(query: string, limit = 5) {
   try {
-    const url = `${BASE_URL}/api/v1${ENDPOINTS.blogBySlug(slug)}`;
-
-    console.log('[getPostBySlug] Fetching:', url);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-    return data.data || data;
-  } catch (error) {
-    console.error('[getPostBySlug] Error:', error);
-    return null;
+    const url = `${API_BASE}${ENDPOINTS.blogAutocomplete}?q=${encodeURIComponent(query)}&limit=${limit}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json?.success) throw new Error(json?.message || 'API error');
+    const suggestions = Array.isArray(json.data) ? json.data : [];
+    return { suggestions, total: json.meta?.totalResults || suggestions.length };
+  } catch (e: any) {
+    console.error('[getAutocompleteSuggestions] Error:', e.message);
+    return { suggestions: [], total: 0 };
   }
 }
 
-// Alias for backward compatibility
-export const getBlogBySlug = getPostBySlug;
+// ── GET /api/v1/blog/:slug ──
+// Response: { success, data: BlogPost }
+export async function getPostBySlug(slug: string) {
+  try {
+    const post = await cachedFetch<BlogPost>({
+      url: ENDPOINTS.blogPost(slug),
+      key: `blog:post:${slug}`,
+      strategy: 'memory',
+      ttl: 3600,
+      parser: (res: any) => {
+        if (!res?.success) throw new Error(res?.message || 'API error');
+        return fixPost(res.data) as BlogPost;
+      },
+    });
+    return post;
+  } catch (e: any) {
+    console.error('[getPostBySlug] Error:', e.message);
+    return null;
+  }
+}

@@ -9,7 +9,6 @@ import {
   useRef,
   ReactNode,
 } from 'react';
-import axios from 'axios';
 import { ConnectionLost } from '@/components/shared/connection-lost';
 
 interface ConnectionContextType {
@@ -21,24 +20,17 @@ interface ConnectionContextType {
 const ConnectionContext = createContext<ConnectionContextType | undefined>(undefined);
 
 const IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds only
-
-// Singleton axios instance (outside component)
-const healthApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:9090',
-  timeout: 5000,
-});
+const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
 // Global state to persist across renders
 let globalIsConnected: boolean | null = null;
 let lastHealthCheck = 0;
-const MIN_CHECK_INTERVAL = 5000; // Minimum 5 seconds between checks
+const MIN_CHECK_INTERVAL = 5000;
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState<boolean | null>(globalIsConnected);
   const [isIdle, setIsIdle] = useState(false);
 
-  // Use refs to prevent re-renders from triggering effects
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isCheckingRef = useRef(false);
@@ -54,23 +46,39 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     if (!force && now - lastHealthCheck < MIN_CHECK_INTERVAL) return;
 
     // Don't check if idle
-    if (!force && isActiveRef.current === false) return;
+    if (!force && !isActiveRef.current) return;
 
     isCheckingRef.current = true;
     lastHealthCheck = now;
 
     try {
-      await healthApi.get('/api/v1/health');
-      globalIsConnected = true;
-      setIsConnected(true);
-    } catch (error: any) {
-      if (!error.response) {
-        globalIsConnected = false;
-        setIsConnected(false);
+      // ADD THIS LINE TO VERIFY NEW CODE IS RUNNING
+      console.log('✅ NEW CONNECTION PROVIDER V2 - USING RELATIVE URL');
+
+      // Use relative URL with cache-busting timestamp
+      const response = await fetch(`/api/v1/health?_=${Date.now()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      console.log('[Connection] Health check status:', response.status);
+
+      if (response.ok) {
+        globalIsConnected = true;
+        setIsConnected(true);
       } else {
+        // API returned error but backend is reachable
         globalIsConnected = true;
         setIsConnected(true);
       }
+    } catch (error: any) {
+      // Network error - backend is down
+      console.error('[Connection] Health check failed:', error.message);
+      globalIsConnected = false;
+      setIsConnected(false);
     } finally {
       isCheckingRef.current = false;
     }
@@ -87,7 +95,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     idleTimerRef.current = setTimeout(() => {
       isActiveRef.current = false;
       setIsIdle(true);
-      console.log('User idle - pausing health checks');
+      console.log('[Connection] User idle - pausing health checks');
     }, IDLE_TIMEOUT);
   }, []);
 
@@ -96,8 +104,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    // Activity listeners (passive for performance)
-    const activities = ['mousedown', 'keydown', 'touchstart'];
+    console.log('🔧 ConnectionProvider mounted - V2 WITH RELATIVE URL');
+
+    // Activity listeners
+    const activities = ['mousedown', 'keydown', 'touchstart', 'scroll'];
     const handleActivity = () => resetIdleTimer();
 
     activities.forEach((activity) => {
@@ -107,7 +117,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     // Initial check
     checkConnection(true);
 
-    // Set up interval (only one!)
+    // Set up interval
     intervalRef.current = setInterval(() => {
       if (isActiveRef.current && !isCheckingRef.current) {
         checkConnection();

@@ -1,13 +1,12 @@
 // src/components/projects/project-card.tsx
 'use client';
 
-import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { Project } from '@/lib/types/models';
 import Image from 'next/image';
 import { getImageUrl } from '@/lib/utils/image-url';
-import { globalCache } from '@/lib/cache/cache';
-import { useRef, useCallback } from 'react';
+import { useSmartPrefetch } from '@/hooks/use-smart-prefetch';
+import { useCachedNavigation } from '@/hooks/use-cached-navigation';
 
 interface ProjectCardProps {
   project: Project;
@@ -24,47 +23,25 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const allTechs = project.technologies || [];
   const status = project.projectStatus || 'planning';
 
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { onMouseEnter, onMouseLeave } = useSmartPrefetch();
+  const { navigateToProject } = useCachedNavigation();
 
-  // SMART HOVER: Only check LOCAL cache, NO server request!
-  const handleMouseEnter = useCallback(() => {
+  const handleClick = (e: React.MouseEvent) => {
     if (!project.slug) return;
-
-    // Clear existing timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-
-    // Check local cache after 300ms (only if still hovering)
-    hoverTimeoutRef.current = setTimeout(async () => {
-      const cacheKey = `project-detail-${project.slug}`;
-      const cached = await globalCache.get(cacheKey);
-
-      if (cached) {
-        console.log(`[Smart Hover] Local cache HIT: ${project.title}`);
-      } else {
-        console.log(`[Smart Hover] Local cache MISS: ${project.title}`);
-      }
-    }, 300);
-  }, [project.slug, project.title]);
-
-  const handleMouseLeave = useCallback(() => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Save scroll position on click
-  const handleClick = () => {
-    sessionStorage.setItem('projects-scroll-position', window.scrollY.toString());
+    navigateToProject(project.slug, e);
   };
 
   return (
     <article
-      className="group bg-white border border-grey-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex-col"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      className="group bg-white border border-grey-200 hover:border-grey-300 rounded-lg overflow-hidden h-full flex flex-col cursor-pointer transition-all duration-300 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
+      onClick={handleClick}
+      onMouseEnter={() => onMouseEnter(project.slug ?? '', project.title ?? '')}
+      onMouseLeave={onMouseLeave}
+      data-slug={project.slug}
+      data-title={project.title}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && handleClick(e as any)}
     >
       {/* Image */}
       <div className="relative w-full bg-grey-100 overflow-hidden flex-shrink-0 h-[180px] sm:h-[200px]">
@@ -74,35 +51,29 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </span>
         </div>
 
-        <Link
-          href={`/projects/${project.slug || '#'}`}
-          className="block w-full h-full"
-          onClick={handleClick}
-        >
-          <div className="relative w-full h-full">
-            {hasImage ? (
-              <Image
-                src={imageUrl}
-                alt={project.title || 'Project'}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 400px"
-                loading="eager"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-grey-100 to-grey-200 flex items-center justify-center">
-                <span className="text-grey-400 text-xs sm:text-sm font-medium">No Image</span>
-              </div>
-            )}
-          </div>
-        </Link>
+        <div className="relative w-full h-full">
+          {hasImage ? (
+            <Image
+              src={imageUrl}
+              alt={project.title || 'Project'}
+              fill
+              className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              sizes="(max-width: 768px) 100vw, 400px"
+              loading="eager"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-grey-100 to-grey-200 flex items-center justify-center">
+              <span className="text-grey-400 text-xs sm:text-sm font-medium">No Image</span>
+            </div>
+          )}
+        </div>
 
         {project.projectUrl && (
           <a
             href={fixUrl(project.projectUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute top-2 sm:top-3 right-2 sm:right-3 p-1.5 sm:p-2 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 shadow-md hover:scale-110"
+            className="absolute top-2 sm:top-3 right-2 sm:right-3 p-1.5 sm:p-2 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 shadow-md"
             onClick={(e) => e.stopPropagation()}
           >
             <ExternalLink size={14} className="sm:w-4 sm:h-4 text-grey-700" />
@@ -112,14 +83,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
       {/* Content */}
       <div className="p-3 sm:p-4 flex-1 flex flex-col">
-        <Link href={`/projects/${project.slug || '#'}`} className="block" onClick={handleClick}>
+        <div>
           <h3 className="font-semibold text-black group-hover:text-red transition-colors duration-200 text-sm sm:text-base">
             {project.title || 'Untitled'}
           </h3>
           <p className="text-xs sm:text-sm text-grey-600 leading-relaxed line-clamp-2 sm:line-clamp-3 mt-1 sm:mt-2">
             {project.excerpt || 'No description'}
           </p>
-        </Link>
+        </div>
 
         <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-4">
           {allTechs.slice(0, 3).map((tech, i) => (

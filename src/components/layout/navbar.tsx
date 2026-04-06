@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils/cn';
-import { Home, FolderKanban, BookOpen, User } from 'lucide-react';
+import { Home, FolderKanban, BookOpen, User, PencilRuler } from 'lucide-react';
 
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/blog', label: 'Blog', icon: BookOpen },
   { href: '/about', label: 'About', icon: User },
+  { href: '/tools', label: 'Tools', icon: PencilRuler },
 ];
 
 export function Navbar() {

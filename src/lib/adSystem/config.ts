@@ -143,5 +143,4 @@ export const adSystemConfig = {
   viewabilityThreshold: 0.5, // 50% visible = impression
   respectDNT: true, // Do Not Track
   respectConsent: true, // GDPR/CCPA consent required
-  fallbackProvider: 'internal' as AdProvider,
 };

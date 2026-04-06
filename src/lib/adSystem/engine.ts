@@ -61,9 +61,9 @@ class AdEngine {
 
     if (eligible.length === 0) {
       // Fallback to any enabled internal ad
-      eligible = adInventory.filter(
-        (ad) => ad.enabled && ad.provider === adSystemConfig.fallbackProvider,
-      );
+      // eligible = adInventory.filter(
+      //   // (ad) => ad.enabled && ad.provider === adSystemConfig.fallbackProvider,
+      // );
     }
 
     if (eligible.length === 0) return null;

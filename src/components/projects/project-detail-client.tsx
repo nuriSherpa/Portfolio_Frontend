@@ -1,7 +1,7 @@
 // src/components/projects/project-detail-client.tsx
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getImageUrl } from '@/lib/utils/image-url';
@@ -16,43 +16,98 @@ interface ProjectDetailClientProps {
   completedDate: string | null;
 }
 
+const CACHE_FROM_LOCAL_KEY = 'projects-detail-from-local';
+
+function formatDate(dateString: string | undefined | Date | null) {
+  if (!dateString) return null;
+  const dateStr = typeof dateString === 'string' ? dateString : (dateString as Date).toISOString();
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+function getInitialState(
+  serverProject: any,
+  serverPostedDate: string | null,
+  serverCompletedDate: string | null,
+  slug: string,
+) {
+  if (typeof window === 'undefined') {
+    return {
+      project: serverProject,
+      postedDate: serverPostedDate,
+      completedDate: serverCompletedDate,
+      fromCache: false,
+    };
+  }
+
+  try {
+    const raw = sessionStorage.getItem(CACHE_FROM_LOCAL_KEY);
+    if (raw) {
+      sessionStorage.removeItem(CACHE_FROM_LOCAL_KEY);
+      const { slug: cachedSlug, data } = JSON.parse(raw);
+      if (cachedSlug === slug && data) {
+        return {
+          project: data,
+          postedDate: formatDate(data.publishedAt),
+          completedDate: formatDate(data.projectCompletionDate),
+          fromCache: true,
+        };
+      }
+    }
+  } catch (_) {}
+
+  return {
+    project: serverProject,
+    postedDate: serverPostedDate,
+    completedDate: serverCompletedDate,
+    fromCache: false,
+  };
+}
+
 export function ProjectDetailClient({
-  project,
+  project: serverProject,
   slug,
-  postedDate,
-  completedDate,
+  postedDate: serverPostedDate,
+  completedDate: serverCompletedDate,
 }: ProjectDetailClientProps) {
   const router = useRouter();
 
-  // Hydrate: Save server-rendered data to local cache
+  const [{ project, postedDate, completedDate, fromCache }] = useState(() =>
+    getInitialState(serverProject, serverPostedDate, serverCompletedDate, slug),
+  );
+
+  const imageUrl = project.projectImage ? getImageUrl(project.projectImage) : null;
+
+  // fromCache = navigated from prefetched card → image already preloaded → show instantly
+  // no imageUrl = nothing to wait for → show instantly
+  // fresh/direct visit → image starts hidden, fades in on load
+  const [imageReady, setImageReady] = useState(fromCache || !imageUrl);
+  const hasSavedToCache = useRef(false);
+
   useEffect(() => {
+    if (hasSavedToCache.current) return;
+    hasSavedToCache.current = true;
     const cacheKey = `project-detail-${slug}`;
-
-    const saveToCache = async () => {
-      try {
-        const existing = await globalCache.get(cacheKey);
-        if (existing) {
-          console.log(`[Hydrate] Already cached: ${slug}`);
-          return;
-        }
-
-        await globalCache.set(cacheKey, project, 1000 * 60 * 60);
-        console.log(`[Hydrate] Saved to local cache: ${slug}`);
-      } catch (e) {
-        console.error('[Hydrate] Cache error:', e);
+    globalCache.get(cacheKey).then((existing) => {
+      if (!existing) {
+        globalCache.set(cacheKey, serverProject, 1000 * 60 * 60);
       }
-    };
+    });
+  }, [slug, serverProject]);
 
-    saveToCache();
-  }, [project, slug]);
+  // Safety net: never stay hidden more than 2s
+  useEffect(() => {
+    if (imageReady) return;
+    const t = setTimeout(() => setImageReady(true), 2000);
+    return () => clearTimeout(t);
+  }, [imageReady]);
 
-  // Browser back - no re-fetch, uses client cache
   const handleBack = () => {
-    if (window.history.length > 1) {
-      router.back();
-    } else {
-      window.location.href = '/projects';
-    }
+    if (window.history.length > 1) router.back();
+    else window.location.href = '/projects';
   };
 
   return (
@@ -68,7 +123,6 @@ export function ProjectDetailClient({
         </button>
       </div>
 
-      {/* Rest of your JSX... */}
       {/* Posted Date and Views */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-grey-500 mb-3">
         {postedDate && (
@@ -110,11 +164,11 @@ export function ProjectDetailClient({
 
       {/* Image and Content */}
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-        {project.projectImage && (
+        {imageUrl && (
           <div className="lg:w-1/2">
             <div className="relative aspect-[4/3] bg-grey-100 rounded-lg overflow-hidden shadow-lg">
               <Image
-                src={getImageUrl(project.projectImage)}
+                src={imageUrl}
                 alt={project.title}
                 fill
                 className="object-cover"

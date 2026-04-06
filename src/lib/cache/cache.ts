@@ -1,21 +1,22 @@
 // src/lib/cache/cache.ts
-const DB_NAME = 'portfolio-cache-v5'; // Bumped version to force clear old caches
+const DB_NAME = 'portfolio-cache-v5';
 const STORE_NAME = 'data';
 const DB_VERSION = 1;
 const CACHE_VERSION_KEY = 'app-cache-version';
+const STABLE_FALLBACK_VERSION = 1; // fixed fallback — never use Date.now()
 
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
   ttl: number;
-  version: number; // Added version field
+  version: number;
 }
 
 class GlobalCache {
   private db: IDBDatabase | null = null;
   private initPromise: Promise<void> | null = null;
   private static instance: GlobalCache;
-  private currentVersion: number = 0;
+  private currentVersion: number = STABLE_FALLBACK_VERSION;
 
   static getInstance(): GlobalCache {
     if (!GlobalCache.instance) {
@@ -34,7 +35,6 @@ class GlobalCache {
       request.onerror = () => reject(request.error);
       request.onsuccess = async () => {
         this.db = request.result;
-        // Check version and clear if stale
         await this.checkAndClearIfStale();
         resolve();
       };
@@ -50,31 +50,28 @@ class GlobalCache {
     return this.initPromise;
   }
 
-  // Check server cache version and clear if different
   private async checkAndClearIfStale(): Promise<void> {
     try {
-      // Get stored version
       const storedVersion = await this.get<number>(CACHE_VERSION_KEY);
-
-      // Fetch current server version
       const serverVersion = await this.fetchServerVersion();
 
-      if (storedVersion && storedVersion !== serverVersion) {
+      // Only clear if we have a stored version AND it differs from server
+      // If server version fetch failed (returned fallback), don't clear
+      if (storedVersion !== null && storedVersion !== serverVersion) {
         console.log(
           `[Client Cache] Version mismatch (${storedVersion} → ${serverVersion}), clearing cache`,
         );
         await this.clear();
       }
 
-      // Update to current version
       this.currentVersion = serverVersion;
-      await this.set(CACHE_VERSION_KEY, serverVersion, 1000 * 60 * 60 * 24); // 24h TTL
+      await this.set(CACHE_VERSION_KEY, serverVersion, 1000 * 60 * 60 * 24);
     } catch (e) {
       console.error('[Client Cache] Version check error:', e);
+      // On any error, keep using the stable fallback — never wipe the cache
     }
   }
 
-  // Fetch current cache version from server
   private async fetchServerVersion(): Promise<number> {
     try {
       const res = await fetch('/api/cache-version', {
@@ -82,15 +79,21 @@ class GlobalCache {
         headers: { Accept: 'application/json' },
       });
 
+      // Only trust the response if the endpoint actually exists
       if (res.ok) {
         const data = await res.json();
-        return data.version || Date.now();
+        return data.version || STABLE_FALLBACK_VERSION;
       }
+
+      // 404 or other error — endpoint doesn't exist, use stable fallback
+      console.log(
+        `[Client Cache] /api/cache-version returned ${res.status}, using stable fallback`,
+      );
+      return STABLE_FALLBACK_VERSION;
     } catch (e) {
-      // Server not available, use timestamp as fallback
-      console.log('[Client Cache] Could not fetch server version, using local timestamp');
+      console.log('[Client Cache] Could not fetch server version, using stable fallback');
+      return STABLE_FALLBACK_VERSION;
     }
-    return Date.now();
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -110,7 +113,6 @@ class GlobalCache {
             return;
           }
 
-          // Check TTL expiration
           const isExpired = Date.now() - entry.timestamp > entry.ttl;
           if (isExpired) {
             this.delete(key);
@@ -166,7 +168,6 @@ class GlobalCache {
     }
   }
 
-  // Clear all cache entries
   async clear(): Promise<void> {
     await this.init();
     if (!this.db) return;

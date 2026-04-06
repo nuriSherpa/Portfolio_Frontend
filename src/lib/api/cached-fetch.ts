@@ -1,5 +1,4 @@
 // src/lib/api/cached-fetch.ts
-import { cache } from 'react';
 
 type CacheStrategy = 'no-cache' | 'memory' | 'disk' | 'isr';
 
@@ -12,73 +11,39 @@ type CachedFetchOptions<T> = {
   parser?: (data: any) => T;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9090/api/v1';
-
-// GLOBAL cache - shared across all requests
-const globalCache =
-  (globalThis as any).__MEMORY_CACHE__ || new Map<string, { data: any; expiry: number }>();
-(globalThis as any).__MEMORY_CACHE__ = globalCache;
-
-export const memoryCache = globalCache;
-
-// Clean expired entries periodically
-if (typeof globalThis !== 'undefined' && !(globalThis as any).__CACHE_CLEANER__) {
-  (globalThis as any).__CACHE_CLEANER__ = setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of globalCache.entries()) {
-      if (value.expiry < now) {
-        globalCache.delete(key);
-      }
-    }
-  }, 60000);
-}
+// Server-side only — use API_URL directly, not the browser proxy
+const API_BASE_URL =
+  typeof window === 'undefined'
+    ? process.env.API_URL || 'http://localhost:9090/api/v1' // SSR / Server Actions
+    : process.env.NEXT_PUBLIC_API_URL || '/api/v1'; // Client-side (goes through Next.js rewrite)
 
 function buildFullUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
   const path = url.startsWith('/') ? url : `/${url}`;
   return `${API_BASE_URL}${path}`;
 }
 
-// The ACTUAL fetch function (wrapped in React cache for deduplication)
-const fetchWithCache = cache(
-  async <T>({
-    fullUrl,
-    cacheKey,
-    ttl,
-    parser,
-  }: {
-    fullUrl: string;
-    cacheKey: string;
-    ttl: number;
-    parser: (data: any) => T;
-  }): Promise<T> => {
-    // Check global cache
-    const cached = globalCache.get(cacheKey);
-    if (cached && cached.expiry > Date.now()) {
-      console.log(`[Server Cache HIT] ${cacheKey}`);
-      return cached.data;
+// Everything on globalThis so Turbopack hot reload never resets them
+if (!(globalThis as any).__MEMORY_CACHE__) {
+  (globalThis as any).__MEMORY_CACHE__ = new Map<string, { data: any; expiry: number }>();
+}
+if (!(globalThis as any).__INFLIGHT_CACHE__) {
+  (globalThis as any).__INFLIGHT_CACHE__ = new Map<string, Promise<any>>();
+}
+if (!(globalThis as any).__CACHE_CLEANER__) {
+  (globalThis as any).__CACHE_CLEANER__ = setInterval(() => {
+    const now = Date.now();
+    const s: Map<string, { data: any; expiry: number }> = (globalThis as any).__MEMORY_CACHE__;
+    for (const [key, val] of s.entries()) {
+      if (val.expiry < now) s.delete(key);
     }
+  }, 60_000);
+}
 
-    console.log(`[Server Cache MISS] ${cacheKey}`);
+const store: Map<string, { data: any; expiry: number }> = (globalThis as any).__MEMORY_CACHE__;
+const inFlight: Map<string, Promise<any>> = (globalThis as any).__INFLIGHT_CACHE__;
 
-    // Fetch from API
-    const response = await fetch(fullUrl, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const data = await response.json();
-    const parsed = parser(data);
-
-    // Save to global cache
-    globalCache.set(cacheKey, {
-      data: parsed,
-      expiry: Date.now() + ttl * 1000,
-    });
-
-    return parsed;
-  },
-);
+export const memoryCache = store;
 
 export async function cachedFetch<T>({
   url,
@@ -90,28 +55,48 @@ export async function cachedFetch<T>({
   const fullUrl = buildFullUrl(url);
   const cacheKey = `${key}:${fullUrl}`;
 
-  // For no-cache strategy, always fetch fresh
   if (strategy === 'no-cache') {
-    const response = await fetch(fullUrl, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return parser(await response.json());
+    const res = await fetch(fullUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return parser(await res.json());
   }
 
-  // For memory strategy, use React cache() for deduplication + global cache
   if (strategy === 'memory') {
-    return fetchWithCache({
-      fullUrl,
-      cacheKey,
-      ttl,
-      parser,
-    });
+    // 1. Persistent store hit
+    const cached = store.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) {
+      console.log(`[Server Cache HIT] ${cacheKey}`);
+      return cached.data as T;
+    }
+
+    // 2. Deduplicate concurrent requests for the same key
+    if (inFlight.has(cacheKey)) {
+      console.log(`[Server Cache INFLIGHT] ${cacheKey}`);
+      return inFlight.get(cacheKey) as Promise<T>;
+    }
+
+    // 3. Fetch from backend, cache result
+    const promise = (async () => {
+      try {
+        console.log(`[Server Cache MISS] ${cacheKey}`);
+        const res = await fetch(fullUrl, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const parsed = parser(await res.json());
+        store.set(cacheKey, { data: parsed, expiry: Date.now() + ttl * 1000 });
+        return parsed;
+      } finally {
+        inFlight.delete(cacheKey);
+      }
+    })();
+
+    inFlight.set(cacheKey, promise);
+    return promise;
   }
 
-  // For disk/isr strategies
   if (strategy === 'disk' || strategy === 'isr') {
-    const response = await fetch(fullUrl, { cache: 'force-cache' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return parser(await response.json());
+    const res = await fetch(fullUrl, { cache: 'force-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return parser(await res.json());
   }
 
   throw new Error(`Unknown cache strategy: ${strategy}`);
@@ -119,33 +104,26 @@ export async function cachedFetch<T>({
 
 export function invalidateCache(keyPattern: string): number {
   let count = 0;
-  const keysToDelete: string[] = [];
-
-  for (const key of globalCache.keys()) {
+  for (const key of store.keys()) {
     if (key.includes(keyPattern)) {
-      keysToDelete.push(key);
+      store.delete(key);
+      console.log(`[Cache INVALIDATED] ${key}`);
+      count++;
     }
   }
-
-  keysToDelete.forEach((key) => {
-    globalCache.delete(key);
-    console.log(`[Cache INVALIDATED] ${key}`);
-    count++;
-  });
-
-  console.log(`[Cache INVALIDATED] Total: ${count} entries for pattern: ${keyPattern}`);
+  console.log(`[Cache INVALIDATED] Total: ${count} for pattern: ${keyPattern}`);
   return count;
 }
 
 export function clearCache(): void {
-  const size = globalCache.size;
-  globalCache.clear();
+  const size = store.size;
+  store.clear();
   console.log(`[Cache CLEARED] ${size} entries removed`);
 }
 
 export function getCacheStats() {
   return {
-    size: globalCache.size,
-    keys: Array.from(globalCache.keys()).slice(0, 10),
+    size: store.size,
+    keys: Array.from(store.keys()).slice(0, 10),
   };
 }

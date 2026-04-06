@@ -1,19 +1,14 @@
+// src/app/(public)/blog/search/page.tsx
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { BlogCard } from '@/components/blog/blog-card';
 import { BlogCardSkeleton } from '@/components/blog/blog-card-skeleton';
-import { Search, SlidersHorizontal, X, Calendar, TrendingUp, Tag } from 'lucide-react';
+import { Search, X, Calendar, Clock } from 'lucide-react';
 import Link from 'next/link';
-import { searchPosts, SearchResults, PostFilters } from '@/lib/api/actions/blog';
-
-// Helper type for dropdown options
-interface FilterOption {
-  value: string;
-  label: string;
-  count?: number;
-}
+import { searchPosts } from '@/lib/api/actions/blog';
+import { BlogPost } from '@/lib/types/models';
 
 const DATE_RANGES = [
   { value: '', label: 'All Time' },
@@ -23,266 +18,218 @@ const DATE_RANGES = [
   { value: '1y', label: 'Last year' },
 ];
 
-const POPULARITY = [
-  { value: '', label: 'Any views' },
-  { value: '100', label: '100+ views' },
-  { value: '500', label: '500+ views' },
-  { value: '1000', label: '1,000+ views' },
+const READING_TIMES = [
+  { value: '', label: 'Any length' },
+  { value: '1', label: '1 min read' },
+  { value: '3', label: '3 min read' },
+  { value: '5', label: '5 min read' },
+  { value: '10', label: '10+ min read' },
 ];
 
-function SearchResultsContent() {
+function SearchContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
   const query = searchParams.get('q') || '';
-  const tag = searchParams.get('tag') || '';
   const category = searchParams.get('category') || '';
+  const tagsRaw = searchParams.get('tags') || '';
   const dateRange = searchParams.get('dateRange') || '';
-  const minViews = searchParams.get('minViews') || '';
+  const minReadingTime = searchParams.get('minReadingTime') || '';
   const sort = searchParams.get('sort') || 'relevance';
 
-  const [results, setResults] = useState<SearchResults | null>(null);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
-  const [availableTags, setAvailableTags] = useState<FilterOption[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<FilterOption[]>([]);
 
   useEffect(() => {
-    const fetchResults = async () => {
+    if (!query && !category && !tagsRaw) {
+      router.replace('/blog');
+      return;
+    }
+
+    const fetch = async () => {
       setIsLoading(true);
       try {
-        const data = await searchPosts(query, {
-          tag: tag || undefined,
+        const result = await searchPosts(query, {
           category: category || undefined,
+          tags: tagsRaw || undefined,
           sort: sort || undefined,
           page: 1,
+          limit: 20,
+          minReadingTime: minReadingTime ? parseInt(minReadingTime) : undefined,
         });
-
-        setResults(data);
-
-        // Transform backend filters to dropdown format
-        if (data.filters) {
-          setAvailableCategories(
-            data.filters.categories.map((c) => ({
-              value: c.slug,
-              label: c.name,
-              count: c.count,
-            })),
-          );
-          setAvailableTags(
-            data.filters.tags.map((t) => ({
-              value: t.name,
-              label: t.name,
-              count: t.count,
-            })),
-          );
-        }
-      } catch (err) {
-        console.error('Search error:', err);
+        setPosts(result.posts || []);
+        setTotal(result.meta?.total || 0);
+      } catch (e) {
+        console.error('Search error:', e);
+        setPosts([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchResults();
-  }, [query, tag, category, dateRange, minViews, sort]);
+    fetch();
+  }, [query, category, tagsRaw, dateRange, minReadingTime, sort, router]);
 
-  const buildUrl = (updates: Record<string, string>) => {
+  const updateFilter = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([key, value]) => {
       if (value) params.set(key, value);
       else params.delete(key);
     });
-    return `/blog/search?${params.toString()}`;
+    router.push(`/blog/search?${params.toString()}`, { scroll: false } as any);
   };
 
-  const activeFiltersCount = [category, dateRange, minViews, tag].filter(Boolean).length;
+  const hasFilters = !!(category || tagsRaw || dateRange || minReadingTime);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <Link href="/blog" className="text-gray-500 hover:text-red-600 text-sm">
-          ← Back to all posts
-        </Link>
-      </div>
+    <main className="min-h-screen bg-white py-12">
+      <div className="w-[80%] mx-auto">
+        {/* Back */}
+        <div className="mb-6">
+          <Link
+            href="/blog"
+            className="inline-flex items-center gap-2 text-grey-500 hover:text-red text-sm transition-colors"
+          >
+            ← Back to Blog
+          </Link>
+        </div>
 
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-          <Search className="w-8 h-8 text-red-600" />
-          {query ? `Results for "${query}"` : tag ? `Posts tagged #${tag}` : 'All posts'}
-        </h1>
-        {!isLoading && results && (
-          <p className="text-gray-600">
-            Found {results.meta.total} post{results.meta.total !== 1 ? 's' : ''}
-          </p>
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-grey-900 mb-1">
+            {query
+              ? `Results for "${query}"`
+              : category
+                ? `Category: ${category}`
+                : tagsRaw
+                  ? `Tag: #${tagsRaw}`
+                  : 'Search'}
+          </h1>
+          {!isLoading && (
+            <p className="text-grey-500 text-sm">
+              {total} post{total !== 1 ? 's' : ''} found
+            </p>
+          )}
+        </div>
+
+        {/* Filters row */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {/* Date range */}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-grey-400" />
+            <select
+              value={dateRange}
+              onChange={(e) => updateFilter({ dateRange: e.target.value || null })}
+              className="text-sm border border-grey-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-red"
+            >
+              {DATE_RANGES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Reading time */}
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-grey-400" />
+            <select
+              value={minReadingTime}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) updateFilter({ minReadingTime: null, maxReadingTime: null });
+                else
+                  updateFilter({ minReadingTime: v, maxReadingTime: (parseInt(v) + 2).toString() });
+              }}
+              className="text-sm border border-grey-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-red"
+            >
+              {READING_TIMES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sort */}
+          <select
+            value={sort}
+            onChange={(e) => updateFilter({ sort: e.target.value })}
+            className="text-sm border border-grey-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-red ml-auto"
+          >
+            {['relevance', 'newest', 'oldest', 'popular'].map((o) => (
+              <option key={o} value={o}>
+                {o.charAt(0).toUpperCase() + o.slice(1)}
+              </option>
+            ))}
+          </select>
+
+          {/* Clear filters */}
+          {hasFilters && (
+            <button
+              onClick={() =>
+                updateFilter({
+                  category: null,
+                  tags: null,
+                  dateRange: null,
+                  minReadingTime: null,
+                  maxReadingTime: null,
+                })
+              }
+              className="inline-flex items-center gap-1 text-sm text-grey-400 hover:text-red transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        {/* Results */}
+        {isLoading ? (
+          <div className="space-y-6">
+            {[...Array(3)].map((_, i) => (
+              <BlogCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="text-center py-20 bg-grey-50 rounded-2xl border border-grey-200">
+            <Search className="w-12 h-12 text-grey-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-grey-900 mb-2">No posts found</h3>
+            <p className="text-grey-500 mb-6">Try adjusting your search or filters.</p>
+            <Link
+              href="/blog"
+              className="px-6 py-2 bg-red text-white rounded-lg hover:opacity-90 transition-opacity text-sm"
+            >
+              Browse all posts
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {posts.map((post) => (
+              <BlogCard key={post._id} post={post} />
+            ))}
+          </div>
         )}
       </div>
-
-      <div className="mb-6 flex gap-2">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            defaultValue={query}
-            placeholder="Search within results..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-600 text-sm"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const value = (e.target as HTMLInputElement).value;
-                window.location.href = buildUrl({ q: value });
-              }
-            }}
-          />
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border ${
-            showFilters || activeFiltersCount > 0
-              ? 'bg-red-600 text-white border-red-600'
-              : 'bg-white text-gray-700 border-gray-200'
-          }`}
-        >
-          <SlidersHorizontal className="w-4 h-4" />
-          <span className="text-sm font-medium">Filters</span>
-          {activeFiltersCount > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-xs">
-              {activeFiltersCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {showFilters && (
-        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-xl">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Category</label>
-              <select
-                value={category}
-                onChange={(e) => (window.location.href = buildUrl({ category: e.target.value }))}
-                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-              >
-                <option value="">All Categories</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label} {cat.count ? `(${cat.count})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                <Tag className="w-3.5 h-3.5" /> Tag
-              </label>
-              <select
-                value={tag}
-                onChange={(e) => (window.location.href = buildUrl({ tag: e.target.value }))}
-                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-              >
-                <option value="">All Tags</option>
-                {availableTags.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    #{t.label} {t.count ? `(${t.count})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                <Calendar className="w-3.5 h-3.5" /> Date Range
-              </label>
-              <select
-                value={dateRange}
-                onChange={(e) => (window.location.href = buildUrl({ dateRange: e.target.value }))}
-                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-              >
-                {DATE_RANGES.map((range) => (
-                  <option key={range.value} value={range.value}>
-                    {range.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-1.5">
-                <TrendingUp className="w-3.5 h-3.5" /> Minimum Views
-              </label>
-              <select
-                value={minViews}
-                onChange={(e) => (window.location.href = buildUrl({ minViews: e.target.value }))}
-                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-              >
-                {POPULARITY.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600">Sort by:</span>
-              <div className="flex gap-2">
-                {results?.filters.sortOptions.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => (window.location.href = buildUrl({ sort: option }))}
-                    className={`px-3 py-1.5 text-sm rounded-md ${
-                      sort === option
-                        ? 'bg-red-600 text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {activeFiltersCount > 0 && (
-              <Link
-                href={`/blog/search?${query ? `q=${query}` : ''}${tag ? `&tag=${tag}` : ''}`}
-                className="flex items-center gap-1 text-sm text-gray-600 hover:text-red-600"
-              >
-                <X className="w-4 h-4" />
-                Clear filters
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="grid gap-4">
-          {[...Array(3)].map((_, i) => (
-            <BlogCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : results?.posts.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No posts found</h3>
-          <p className="text-gray-600">
-            Try adjusting your search or filters to find what you're looking for.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {results?.posts.map((post) => (
-            <BlogCard key={post.id || post._id} post={post} />
-          ))}
-        </div>
-      )}
-    </div>
+    </main>
   );
 }
 
-export default function SearchResultsPage() {
+export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="max-w-4xl mx-auto px-4 py-8">Loading...</div>}>
-      <SearchResultsContent />
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-white py-12">
+          <div className="w-[80%] mx-auto space-y-6">
+            {[...Array(3)].map((_, i) => (
+              <BlogCardSkeleton key={i} />
+            ))}
+          </div>
+        </main>
+      }
+    >
+      <SearchContent />
     </Suspense>
   );
 }

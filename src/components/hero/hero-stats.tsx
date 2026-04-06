@@ -1,105 +1,106 @@
-// src/components/hero/hero-stats.tsx
 'use client';
 
 import { Users, Box, ThumbsUp } from 'lucide-react';
-import { AiOutlineLike } from 'react-icons/ai';
 import { useState, useEffect } from 'react';
-
-function formatNumber(num: number): string {
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-  return num.toString();
-}
+import { toggleLike, PublicStats, LIKED_KEY } from '@/lib/api/actions/stats';
+import { useStats } from '@/hooks/use-stats';
+import { ScrollingNumber } from './scrolling-number';
 
 interface HeroStatsProps {
-  visitorCount: number;
-  projectCount: number;
-  likeCount: number;
+  serverStats: PublicStats;
 }
 
-export function HeroStats({ visitorCount, projectCount, likeCount }: HeroStatsProps) {
-  const [likes, setLikes] = useState(likeCount);
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeBump, setLikeBump] = useState(false);
+export function HeroStats({ serverStats }: HeroStatsProps) {
+  console.log('[HeroStats] serverStats received:', serverStats);
 
-  // Load liked status from localStorage on mount
+  const { stats, prevStats, changedFields, isLiked, setIsLiked, updateStats } =
+    useStats(serverStats);
+  const [isLikeLoading, setIsLikeLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    const savedLiked = localStorage.getItem('heroLiked');
-    const savedLikes = localStorage.getItem('heroLikes');
-
-    if (savedLiked !== null) {
-      setIsLiked(JSON.parse(savedLiked));
-    }
-
-    if (savedLikes !== null) {
-      setLikes(JSON.parse(savedLikes));
-    }
+    setMounted(true);
   }, []);
 
-  const handleLike = () => {
-    // Bump effect
-    setLikeBump(true);
-    setTimeout(() => setLikeBump(false), 200);
+  const handleLike = async () => {
+    if (isLiked || isLikeLoading) return;
 
-    // Update like status
-    const newLiked = !isLiked;
-    const newLikes = newLiked ? likes + 1 : likes - 1;
+    setIsLiked(true);
+    setIsLikeLoading(true);
 
-    setIsLiked(newLiked);
-    setLikes(newLikes);
-
-    // Save to localStorage
-    localStorage.setItem('heroLiked', JSON.stringify(newLiked));
-    localStorage.setItem('heroLikes', JSON.stringify(newLikes));
+    try {
+      const result = await toggleLike();
+      if (result.liked) {
+        updateStats({ likes: stats.likes + 1 });
+        localStorage.setItem(LIKED_KEY, 'true');
+      } else if (result.alreadyLiked) {
+        localStorage.setItem(LIKED_KEY, 'true');
+      }
+    } catch (err) {
+      console.error('Like failed:', err);
+      setIsLiked(false);
+    } finally {
+      setIsLikeLoading(false);
+    }
   };
+
+  const shouldAnimate = (field: keyof PublicStats) => mounted && changedFields.has(field);
 
   return (
     <div className="flex justify-center gap-8 lg:gap-12">
-      {/* Visitors - Static */}
       <div className="flex items-center gap-3">
         <Users size={20} className="text-grey-600" />
         <div>
-          <div className="text-2xl font-bold text-black tabular-nums">
-            {formatNumber(visitorCount)}
+          <div className="text-2xl font-bold text-black tabular-nums leading-none">
+            <ScrollingNumber
+              value={stats.visitors}
+              prevValue={prevStats.visitors}
+              animate={shouldAnimate('visitors')}
+            />
           </div>
-          <div className="text-sm text-grey-500">Visitors</div>
+          <div className="text-sm text-grey-500 mt-1">Visitors</div>
         </div>
       </div>
 
-      {/* Projects - Static */}
       <div className="flex items-center gap-3">
         <Box size={20} className="text-grey-600" />
         <div>
-          <div className="text-2xl font-bold text-black tabular-nums">
-            {formatNumber(projectCount)}
+          <div className="text-2xl font-bold text-black tabular-nums leading-none">
+            <ScrollingNumber
+              value={stats.projects}
+              prevValue={prevStats.projects}
+              animate={shouldAnimate('projects')}
+            />
           </div>
-          <div className="text-sm text-grey-500">Projects</div>
+          <div className="text-sm text-grey-500 mt-1">Projects</div>
         </div>
       </div>
 
-      {/* Likes - Interactive with bump effect and persistence */}
       <button
         onClick={handleLike}
-        className="flex items-center gap-3 group cursor-pointer select-none focus:outline-none"
-        aria-label={isLiked ? 'Unlike' : 'Like'}
+        disabled={isLiked || isLikeLoading}
+        className="flex items-center gap-3 group cursor-pointer select-none focus:outline-none disabled:cursor-default"
+        aria-label={isLiked ? 'Liked' : 'Like'}
       >
-        <div className={`transition-transform duration-200 ${likeBump ? 'scale-110' : ''}`}>
-          <ThumbsUp
-            size={20}
-            className={`transition-all duration-200 ${
-              isLiked ? 'text-red' : 'text-grey-600 group-hover:text-red'
-            }`}
-          />
-        </div>
+        <ThumbsUp
+          size={20}
+          className={`transition-all duration-100 ${
+            isLiked ? 'text-red ' : 'text-grey-600 group-hover:text-red'
+          }`}
+        />
         <div>
           <div
-            className={`text-2xl font-bold tabular-nums transition-colors duration-200 ${
+            className={`text-2xl font-bold tabular-nums leading-none transition-colors duration-200 ${
               isLiked ? 'text-red' : 'text-black'
             }`}
           >
-            {formatNumber(likes)}
+            <ScrollingNumber
+              value={stats.likes}
+              prevValue={prevStats.likes}
+              animate={shouldAnimate('likes')}
+            />
           </div>
-          <div className="text-sm text-grey-500">Likes</div>
+          <div className="text-sm text-grey-500 mt-1">Likes</div>
         </div>
       </button>
     </div>

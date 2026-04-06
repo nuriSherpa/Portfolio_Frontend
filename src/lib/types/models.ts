@@ -1,4 +1,5 @@
 // src/lib/types/models.ts
+
 export interface Story {
   id: string;
   image: string;
@@ -6,33 +7,32 @@ export interface Story {
   uploadedAt: string;
 }
 
-// Main Stats interface
 export interface Stats {
   _id: string;
-  totalLikes: number; // Defaults to 0, min: 0
-  totalVisitors: number; // Defaults to 0, min: 0
-  totalProjects: number; // Total number of projects
-  lastUpdated: Date | string; // Defaults to Date.now
-  createdAt: string; // From timestamps: true
-  updatedAt: string; // From timestamps: true
+  totalLikes: number;
+  totalVisitors: number;
+  totalProjects: number;
+  lastUpdated: Date | string;
+  createdAt: string;
+  updatedAt: string;
 }
-// src/lib/types/models.ts
-// src/lib/types/models.ts
+
 export interface HeroSection {
-  _id?: string; // Made optional
+  _id?: string;
   name: string;
   titles: string[];
   profileImage: string;
   shortBio: string;
   hireMe?: boolean;
   socialLinks: SocialLink[];
-  isActive?: boolean; // Made optional
-  createdAt?: string; // Made optional
-  updatedAt?: string; // Made optional
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   visitorCount?: number;
   projectCount?: number;
   likeCount?: number;
 }
+
 export interface Project {
   _id: string;
   title: string;
@@ -63,6 +63,7 @@ export interface Project {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
 export interface AboutMe {
   id: string;
   name: string;
@@ -92,57 +93,119 @@ export interface SocialLink {
   order?: number;
 }
 
-// lib/types/models.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// Blog types — aligned with the refactored backend
+// Key change: `content` stores processed HTML directly.
+//             `contentHtml` is removed (was redundant).
+//             `featuredImage` is now optional (no longer required on create).
+//             Inline images live inside `content` as <img> tags.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BlogAuthor {
+  name: string;
+  title?: string;
+  avatar?: string;
+  isGuest?: boolean;
+}
+
+export interface TocItem {
+  level: number;
+  text: string;
+  id: string;
+}
+
 export interface BlogPost {
   _id: string;
   title: string;
   slug: string;
   excerpt?: string;
-  content?: string;
-  contentHtml?: string;
 
-  // Images - multiple fallbacks
-  featuredImage?: string; // Main uploaded image (required)
-  featuredImageAlt?: string; // Alt text for featured image
-  coverImage?: string; // Legacy/alternative
-  firstImage?: string; // First image from content
+  // `content` is the canonical HTML field — replaces the old `contentHtml`.
+  // It is processed HTML (heading ids injected, inline images embedded).
+  content: string;
 
-  // Author
-  author?: {
-    name: string;
-    title?: string;
-    avatar?: string;
-    isGuest?: boolean;
-  };
+  // Featured / hero image — optional. Separate from inline content images.
+  featuredImage?: string | null;
+  featuredImageAlt?: string;
 
-  // Meta
+  // First <img> src found anywhere in `content` — used for OG / structured data
+  // when featuredImage is absent.
+  firstImage?: string | null;
+
+  author?: BlogAuthor;
+
+  // Dates
   publishedAt: string;
-  readingTime?: number; // From API
-  readTime?: number; // Legacy fallback
+  lastUpdatedAt?: string;
+
+  // Reading metadata
+  readingTime?: number;
+  wordCount?: number;
+  views?: number;
+
+  // Taxonomy
   tags: string[];
   category?: string;
   categorySlug?: string;
-  views?: number;
 
   // SEO
   metaTitle?: string;
   metaDescription?: string;
   canonicalUrl?: string;
+  focusKeyword?: string;
 
-  // Content
-  toc?: Array<{
-    level: number;
-    text: string;
-    id: string;
-  }>;
-  wordCount?: number;
+  // Table of contents — extracted from HTML headings by the backend
+  toc?: TocItem[];
 
-  lastUpdatedAt?: string;
+  // Mongoose timestamps
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export interface Author {
-  name: string;
-  avatar?: string;
-  bio?: string;
-  title?: string; // Added
+// Shape returned by GET /api/blog (list endpoint)
+export interface BlogListMeta {
+  total: number;
+  page: number;
+  totalPages: number;
+  showing: number;
+  hasNext: boolean;
+  hasPrev: boolean;
 }
+
+export interface BlogListFilters {
+  categories: { name: string; slug: string; count: number }[];
+  tags: { name: string; count: number }[];
+  sortOptions: string[];
+}
+
+export interface BlogListResponse {
+  posts: BlogPost[];
+  meta: BlogListMeta;
+  filters: BlogListFilters;
+}
+
+// Autocomplete result shapes
+export type AutocompletePostResult = {
+  type: 'post';
+  id: string;
+  title: string;
+  slug: string;
+  category?: string;
+  tags: string[];
+  display: string;
+  source: 'title_match' | 'tag_match';
+  priority: number;
+  views: number;
+  rank: number;
+};
+
+export type AutocompleteTagResult = {
+  type: 'tag';
+  tag: string;
+  count: number;
+  display: string;
+  source: 'exact_tag';
+  priority: number;
+};
+
+export type AutocompleteResult = AutocompletePostResult | AutocompleteTagResult;

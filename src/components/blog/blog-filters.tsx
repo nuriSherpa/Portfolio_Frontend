@@ -2,19 +2,17 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { X, Filter, Calendar, Clock, User, ChevronDown, ChevronUp, Search } from 'lucide-react';
-import { useState } from 'react';
+import { X, Filter, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
-interface FiltersProps {
+interface BlogFiltersProps {
   initialFilters: {
     categories: Array<{ name: string; slug: string; count: number }>;
     tags: Array<{ name: string; count: number }>;
-    authors?: Array<{ name: string; slug: string }>;
     sortOptions: string[];
   };
 }
 
-// Date range presets
 const DATE_RANGES = [
   { value: '', label: 'All Time' },
   { value: '7d', label: 'Last 7 days' },
@@ -23,7 +21,6 @@ const DATE_RANGES = [
   { value: '1y', label: 'Last year' },
 ];
 
-// Reading time presets
 const READING_TIMES = [
   { value: '', label: 'Any length' },
   { value: '1', label: '1 min read' },
@@ -32,327 +29,334 @@ const READING_TIMES = [
   { value: '10', label: '10+ min read' },
 ];
 
-export function BlogFilters({ initialFilters }: FiltersProps) {
+// Local cache key
+const FILTERS_CACHE_KEY = 'blog-filters-cache';
+
+export function BlogFilters({ initialFilters }: BlogFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isOpen, setIsOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
-  // Get all current filter values
-  const query = searchParams.get('q') || '';
-  const category = searchParams.get('category') || '';
-  const tag = searchParams.get('tag') || '';
-  const sort = searchParams.get('sort') || 'newest';
-  const author = searchParams.get('author') || '';
-  const dateRange = searchParams.get('dateRange') || '';
-  const minReadingTime = searchParams.get('minReadingTime') || '';
-  const maxReadingTime = searchParams.get('maxReadingTime') || '';
-  const fromDate = searchParams.get('fromDate') || '';
-  const toDate = searchParams.get('toDate') || '';
+  // Cached filters — seed from initialFilters, persist to localStorage
+  const [cachedFilters, setCachedFilters] = useState(initialFilters);
 
-  // Count active filters (excluding sort and search query)
-  const activeFilterCount = [
-    category,
-    tag,
-    author,
-    dateRange,
-    minReadingTime,
-    maxReadingTime,
-    fromDate,
-    toDate,
-  ].filter(Boolean).length;
+  // On mount: try to load from localStorage, fall back to initialFilters
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(FILTERS_CACHE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only use cached if it has data
+        if (parsed?.categories?.length || parsed?.tags?.length) {
+          setCachedFilters(parsed);
+        }
+      }
+    } catch (_) {}
+  }, []);
 
-  const hasActiveFilters = activeFilterCount > 0;
+  // When initialFilters change (fresh SSR data), update cache
+  useEffect(() => {
+    if (initialFilters?.categories?.length || initialFilters?.tags?.length) {
+      setCachedFilters(initialFilters);
+      try {
+        localStorage.setItem(FILTERS_CACHE_KEY, JSON.stringify(initialFilters));
+      } catch (_) {}
+    }
+  }, [initialFilters]);
 
-  // Update URL helper
+  // Read URL params
+  const urlCategory = searchParams.get('category') || '';
+  const urlTagsRaw = searchParams.get('tags') || '';
+  const urlTags = urlTagsRaw ? urlTagsRaw.split(',').filter(Boolean) : [];
+  const urlSort = searchParams.get('sort') || 'newest';
+  const urlDateRange = searchParams.get('dateRange') || '';
+  const urlMinReadingTime = searchParams.get('minReadingTime') || '';
+  const urlMaxReadingTime = searchParams.get('maxReadingTime') || '';
+
+  const categories = cachedFilters?.categories || [];
+  const allTags = cachedFilters?.tags || [];
+  const sortOptions = cachedFilters?.sortOptions?.length
+    ? cachedFilters.sortOptions
+    : ['newest', 'oldest', 'popular', 'a-z', 'z-a'];
+
+  // Active filter count (excluding category shown in pills, excluding sort)
+  const activeFilterCount = [urlTagsRaw, urlDateRange, urlMinReadingTime].filter(Boolean).length;
+  const hasActiveFilters = !!(
+    urlCategory ||
+    urlTagsRaw ||
+    urlDateRange ||
+    urlMinReadingTime ||
+    urlMaxReadingTime
+  );
+
+  // ── URL helper ──
   const push = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([key, value]) => {
-      if (value && value !== '') params.set(key, value);
+      if (value) params.set(key, value);
       else params.delete(key);
     });
-    params.delete('page'); // Reset to page 1 on filter change
+    params.delete('page');
     router.push(`/blog?${params.toString()}`, { scroll: false });
   };
 
-  // Clear all filters
-  const clearAll = () => {
-    const params = new URLSearchParams();
-    if (query) params.set('q', query); // Keep search query
-    if (sort && sort !== 'newest') params.set('sort', sort); // Keep sort preference
-    router.push(`/blog${params.toString() ? `?${params.toString()}` : ''}`, { scroll: false });
-    setIsOpen(false);
+  // ── Category — single select, toggles off if clicked again ──
+  const handleCategoryClick = (slug: string | null) => {
+    // If clicking the already-active category, deselect it
+    if (slug && slug === urlCategory) {
+      push({ category: null, tags: null }); // also clear tags when deselecting category
+    } else {
+      push({ category: slug, tags: null }); // clear tags when switching category
+    }
   };
 
-  // Clear individual filter
-  const clearFilter = (key: string) => {
-    push({ [key]: null });
+  // ── Tags — multi select ──
+  const handleTagToggle = (tagName: string) => {
+    const current = new Set(urlTags);
+    if (current.has(tagName)) current.delete(tagName);
+    else current.add(tagName);
+    const joined = Array.from(current).join(',');
+    push({ tags: joined || null });
   };
 
-  // Handle date range selection
+  // ── Date range ──
   const handleDateRangeChange = (value: string) => {
     if (!value) {
       push({ dateRange: null, fromDate: null, toDate: null });
       return;
     }
-
     const now = new Date();
     let from: Date | null = null;
-    let to: Date | null = now;
-
     switch (value) {
       case '7d':
-        from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        from = new Date(now.getTime() - 7 * 86400000);
         break;
       case '30d':
-        from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        from = new Date(now.getTime() - 30 * 86400000);
         break;
       case '90d':
-        from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        from = new Date(now.getTime() - 90 * 86400000);
         break;
       case '1y':
-        from = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        from = new Date(now.getTime() - 365 * 86400000);
         break;
     }
-
     push({
       dateRange: value,
       fromDate: from ? from.toISOString() : null,
-      toDate: to ? to.toISOString() : null,
+      toDate: now.toISOString(),
     });
   };
 
-  // Safely get sort options with fallback
-  const sortOptions = initialFilters.sortOptions?.length
-    ? initialFilters.sortOptions
-    : ['newest', 'oldest', 'popular', 'relevance'];
-
-  // Safely check if authors exist and have items
-  const hasAuthors = initialFilters.authors && initialFilters.authors.length > 0;
+  // ── Clear all ──
+  const clearAll = () => {
+    const params = new URLSearchParams();
+    if (urlSort && urlSort !== 'newest') params.set('sort', urlSort);
+    router.push(`/blog${params.toString() ? `?${params.toString()}` : ''}`, { scroll: false });
+    setPanelOpen(false);
+  };
 
   return (
-    <div className="relative">
-      {/* Filter Toggle Button */}
-      <div className="flex items-center gap-3">
+    <div className="space-y-3">
+      {/* ── Row 1: Category pills — always visible ── */}
+      <div className="flex flex-wrap gap-2">
+        {/* All Posts */}
         <button
-          onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all ${
-            hasActiveFilters
-              ? 'bg-red text-white border-red hover:bg-red-700'
+          onClick={() => handleCategoryClick(null)}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 ${
+            !urlCategory
+              ? 'bg-red text-white'
+              : 'bg-grey-100 text-grey-600 hover:bg-red hover:text-white'
+          }`}
+        >
+          All Posts
+        </button>
+
+        {/* Category pills */}
+        {categories.map((cat) => (
+          <button
+            key={cat.slug}
+            onClick={() => handleCategoryClick(cat.slug)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 ${
+              urlCategory === cat.slug
+                ? 'bg-red text-white'
+                : 'bg-grey-100 text-grey-600 hover:bg-red hover:text-white'
+            }`}
+          >
+            {cat.name}
+            {cat.count > 0 && (
+              <span
+                className={`ml-1.5 text-xs ${urlCategory === cat.slug ? 'opacity-75' : 'opacity-50'}`}
+              >
+                {cat.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Row 2: Filter toggle + active chips ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Filter toggle */}
+        <button
+          onClick={() => setPanelOpen((o) => !o)}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+            activeFilterCount > 0
+              ? 'bg-red text-white border-red'
               : 'bg-white text-grey-700 border-grey-200 hover:border-red hover:text-red'
           }`}
         >
           <Filter className="w-4 h-4" />
-          <span className="text-sm font-medium">
-            Filters
-            {hasActiveFilters && (
-              <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded text-xs">
-                {activeFilterCount}
-              </span>
-            )}
-          </span>
-          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">{activeFilterCount}</span>
+          )}
+          {panelOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
 
-        {/* Active Filter Pills (shown when dropdown closed but filters active) */}
-        {!isOpen && hasActiveFilters && (
-          <div className="hidden md:flex items-center gap-2 flex-wrap">
-            {category && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-blue-50 text-blue-600 border border-blue-200">
-                {category}
-                <button onClick={() => clearFilter('category')} className="hover:text-blue-800">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {tag && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-green-50 text-green-600 border border-green-200">
-                #{tag}
-                <button onClick={() => clearFilter('tag')} className="hover:text-green-800">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {author && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-purple-50 text-purple-600 border border-purple-200">
-                <User className="w-3 h-3" />
-                {author}
-                <button onClick={() => clearFilter('author')} className="hover:text-purple-800">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {dateRange && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-orange-50 text-orange-600 border border-orange-200">
-                <Calendar className="w-3 h-3" />
-                {DATE_RANGES.find((d) => d.value === dateRange)?.label || dateRange}
-                <button onClick={() => clearFilter('dateRange')} className="hover:text-orange-800">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {(minReadingTime || maxReadingTime) && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full bg-teal-50 text-teal-600 border border-teal-200">
-                <Clock className="w-3 h-3" />
-                {minReadingTime || '0'}-{maxReadingTime || '∞'} min
-                <button
-                  onClick={() => {
-                    push({ minReadingTime: null, maxReadingTime: null });
-                  }}
-                  className="hover:text-teal-800"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-          </div>
+        {/* Active tag chips */}
+        {urlTags.map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red/10 text-red border border-red/20 text-sm"
+          >
+            <span className="font-medium">#{tag}</span>
+            <button
+              onClick={() => handleTagToggle(tag)}
+              className="ml-1 p-0.5 hover:bg-red/20 rounded-full"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        ))}
+
+        {/* Active date chip */}
+        {urlDateRange && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red/10 text-red border border-red/20 text-sm">
+            <Calendar className="w-3.5 h-3.5" />
+            <span className="font-medium">
+              {DATE_RANGES.find((d) => d.value === urlDateRange)?.label}
+            </span>
+            <button
+              onClick={() => push({ dateRange: null, fromDate: null, toDate: null })}
+              className="ml-1 p-0.5 hover:bg-red/20 rounded-full"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </span>
         )}
 
-        {/* Clear All (when filters active) */}
+        {/* Active reading time chip */}
+        {(urlMinReadingTime || urlMaxReadingTime) && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red/10 text-red border border-red/20 text-sm">
+            <Clock className="w-3.5 h-3.5" />
+            <span className="font-medium">
+              {urlMinReadingTime || '0'}–{urlMaxReadingTime || '∞'} min
+            </span>
+            <button
+              onClick={() => push({ minReadingTime: null, maxReadingTime: null })}
+              className="ml-1 p-0.5 hover:bg-red/20 rounded-full"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        )}
+
+        {/* Clear all */}
         {hasActiveFilters && (
           <button
             onClick={clearAll}
-            className="text-sm text-grey-500 hover:text-red transition-colors underline"
+            className="text-sm text-grey-400 hover:text-red transition-colors underline ml-1"
           >
             Clear all
           </button>
         )}
       </div>
 
-      {/* Filter Dropdown Panel */}
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-white border border-grey-200 rounded-xl shadow-lg z-50">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Search Input (if not already shown elsewhere) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-grey-500 flex items-center gap-1">
-                <Search className="w-3 h-3" />
-                Search
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={query}
-                  readOnly
-                  placeholder="Use search box above"
-                  className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-grey-50 text-grey-400 cursor-not-allowed"
-                />
+      {/* ── Filter panel ── */}
+      {panelOpen && (
+        <div className="p-5 bg-white border border-grey-200 rounded-xl shadow-sm space-y-5">
+          {/* Tags — show all tags, or filtered by category if one is active */}
+          {allTags.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-grey-500 mb-2">
+                Tags
+                {urlCategory && (
+                  <span className="ml-1 text-grey-400 font-normal">
+                    — filtered by {categories.find((c) => c.slug === urlCategory)?.name}
+                  </span>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {allTags.map((tag) => {
+                  const active = urlTags.includes(tag.name);
+                  return (
+                    <button
+                      key={tag.name}
+                      onClick={() => handleTagToggle(tag.name)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors duration-150 ${
+                        active
+                          ? 'bg-red text-white'
+                          : 'bg-grey-100 text-grey-600 hover:bg-red/10 hover:text-red'
+                      }`}
+                    >
+                      #{tag.name}
+                      {tag.count > 0 && (
+                        <span className={`ml-1.5 text-xs ${active ? 'opacity-75' : 'opacity-50'}`}>
+                          {tag.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+          )}
 
-            {/* Category Filter */}
-            {(initialFilters.categories ?? []).length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-grey-500">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => push({ category: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-white focus:outline-none focus:border-red focus:ring-2 focus:ring-red/20"
-                >
-                  <option value="">All categories</option>
-                  {initialFilters.categories.map((c) => (
-                    <option key={c.slug} value={c.slug}>
-                      {c.name} ({c.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Tag Filter */}
-            {(initialFilters.tags ?? []).length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-grey-500">Tag</label>
-                <select
-                  value={tag}
-                  onChange={(e) => push({ tag: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-white focus:outline-none focus:border-red focus:ring-2 focus:ring-red/20"
-                >
-                  <option value="">All tags</option>
-                  {initialFilters.tags.map((t) => (
-                    <option key={t.name} value={t.name}>
-                      #{t.name} ({t.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Author Filter - FIXED with proper optional check */}
-            {hasAuthors && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-grey-500 flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  Author
-                </label>
-                <select
-                  value={author}
-                  onChange={(e) => push({ author: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-white focus:outline-none focus:border-red focus:ring-2 focus:ring-red/20"
-                >
-                  <option value="">All authors</option>
-                  {initialFilters.authors!.map((a) => (
-                    <option key={a.slug} value={a.name}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Date Range Filter */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-grey-500 flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                Date Range
+          {/* Date range + Reading time + Sort */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-medium text-grey-500 flex items-center gap-1 mb-1.5">
+                <Calendar className="w-3 h-3" /> Date Range
               </label>
               <select
-                value={dateRange}
+                value={urlDateRange}
                 onChange={(e) => handleDateRangeChange(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-white focus:outline-none focus:border-red focus:ring-2 focus:ring-red/20"
               >
-                {DATE_RANGES.map((range) => (
-                  <option key={range.value} value={range.value}>
-                    {range.label}
+                {DATE_RANGES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Reading Time Filter */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-grey-500 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                Reading Time
+            <div>
+              <label className="text-xs font-medium text-grey-500 flex items-center gap-1 mb-1.5">
+                <Clock className="w-3 h-3" /> Reading Time
               </label>
               <select
-                value={minReadingTime}
+                value={urlMinReadingTime}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  if (!value) {
-                    push({ minReadingTime: null, maxReadingTime: null });
-                  } else {
-                    const min = parseInt(value);
-                    push({
-                      minReadingTime: value,
-                      maxReadingTime: (min + 2).toString(), // Approximate range
-                    });
-                  }
+                  const v = e.target.value;
+                  if (!v) push({ minReadingTime: null, maxReadingTime: null });
+                  else push({ minReadingTime: v, maxReadingTime: (parseInt(v) + 2).toString() });
                 }}
                 className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-white focus:outline-none focus:border-red focus:ring-2 focus:ring-red/20"
               >
-                {READING_TIMES.map((time) => (
-                  <option key={time.value} value={time.value}>
-                    {time.label}
+                {READING_TIMES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Sort Order */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-grey-500">Sort By</label>
+            <div>
+              <label className="text-xs font-medium text-grey-500 mb-1.5 block">Sort By</label>
               <select
-                value={sort}
+                value={urlSort}
                 onChange={(e) => push({ sort: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-grey-200 rounded-lg bg-white focus:outline-none focus:border-red focus:ring-2 focus:ring-red/20"
               >
@@ -365,27 +369,21 @@ export function BlogFilters({ initialFilters }: FiltersProps) {
             </div>
           </div>
 
-          {/* Dropdown Footer */}
-          <div className="mt-4 pt-4 border-t border-grey-200 flex items-center justify-between">
-            <span className="text-sm text-grey-500">
-              {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
-            </span>
-            <div className="flex items-center gap-2">
+          <div className="flex justify-end gap-2 pt-1 border-t border-grey-100">
+            <button
+              onClick={() => setPanelOpen(false)}
+              className="px-4 py-2 text-sm text-grey-600 hover:text-grey-900 transition-colors"
+            >
+              Close
+            </button>
+            {hasActiveFilters && (
               <button
-                onClick={() => setIsOpen(false)}
-                className="px-4 py-2 text-sm text-grey-600 hover:text-grey-900 transition-colors"
+                onClick={clearAll}
+                className="px-4 py-2 text-sm bg-red text-white rounded-lg hover:opacity-90 transition-opacity"
               >
-                Close
+                Clear All
               </button>
-              {hasActiveFilters && (
-                <button
-                  onClick={clearAll}
-                  className="px-4 py-2 text-sm bg-red text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}

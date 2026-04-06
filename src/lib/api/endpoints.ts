@@ -1,16 +1,17 @@
-// src/lib/api/endpoints.ts
 export const ENDPOINTS = {
   // Public routes
+  visitorInit: '/visitor/init',
   hero: '/hero',
   heroStories: '/hero/stories',
+  heroStats: '/hero/stats', // ← add
+  heroLike: '/hero/stats/like', // ← add
   projects: '/projects',
   projectBySlug: (slug: string) => `/project/${slug}`,
   about: '/about',
   blogs: '/blog',
   blogBySlug: (slug: string) => `/blog/${slug}`,
-  blogSearch: '/blog/search', // Full search results
-  autocomplete: '/blog/search/autocomplete', // Suggestions only
-  visitorInit: '/visitor/init',
+  blogSearch: '/blog/search',
+  autocomplete: '/blog/search/autocomplete',
 
   // Admin routes
   admin: {

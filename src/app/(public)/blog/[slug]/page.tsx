@@ -63,7 +63,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <BlogPostSidebar post={post} />
           </aside>
         </div>
-        <ScrollToTopButton />
       </div>
     </main>
   );

@@ -5,10 +5,13 @@ import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ExpandableDescriptionProps {
-  description: string;
+  description?: string; // Make it optional
 }
 
-export function ExpandableDescription({ description }: ExpandableDescriptionProps) {
+export function ExpandableDescription({ description = '' }: ExpandableDescriptionProps) {
+  // ✅ Use default empty string right in the parameter
+  const safeDescription = description || '';
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowButton, setShouldShowButton] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -33,17 +36,21 @@ export function ExpandableDescription({ description }: ExpandableDescriptionProp
 
   // Check if content needs Read More button
   useEffect(() => {
-    const wordCount = description.split(/\s+/).length;
-    setShouldShowButton(wordCount > 40);
-  }, [description]);
+    if (safeDescription) {
+      const wordCount = safeDescription.split(/\s+/).length;
+      setShouldShowButton(wordCount > 40);
+    } else {
+      setShouldShowButton(false);
+    }
+  }, [safeDescription]);
 
   // Measure content height for overlay
   useEffect(() => {
-    if (contentRef.current) {
+    if (contentRef.current && safeDescription) {
       const height = contentRef.current.scrollHeight;
       setOverlayHeight(Math.min(height + 80, 500));
     }
-  }, [description]);
+  }, [safeDescription]);
 
   // Update overlay position and hide preview immediately when expanded
   useEffect(() => {
@@ -74,10 +81,16 @@ export function ExpandableDescription({ description }: ExpandableDescriptionProp
 
   // Get preview text
   const getPreviewText = () => {
-    const words = description.split(/\s+/);
-    if (words.length <= 40) return description;
+    if (!safeDescription) return '';
+    const words = safeDescription.split(/\s+/);
+    if (words.length <= 40) return safeDescription;
     return words.slice(0, 40).join(' ') + '...';
   };
+
+  // ✅ Don't render if no description
+  if (!safeDescription) {
+    return null;
+  }
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -116,7 +129,9 @@ export function ExpandableDescription({ description }: ExpandableDescriptionProp
               <div className="h-full flex flex-col">
                 {/* Scrollable content */}
                 <div ref={contentRef} className="flex-1 overflow-y-auto">
-                  <p className="text-grey-700 leading-relaxed whitespace-pre-wrap">{description}</p>
+                  <p className="text-grey-700 leading-relaxed whitespace-pre-wrap">
+                    {safeDescription}
+                  </p>
                 </div>
 
                 {/* Show less button */}
@@ -152,7 +167,7 @@ export function ExpandableDescription({ description }: ExpandableDescriptionProp
               </>
             ) : (
               <div>
-                <p className="whitespace-pre-wrap mb-3">{description}</p>
+                <p className="whitespace-pre-wrap mb-3">{safeDescription}</p>
                 <div className="flex justify-end">
                   <button
                     onClick={() => setIsExpanded(false)}
